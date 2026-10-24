@@ -27,6 +27,47 @@ These rules override any default or built-in agent guidance about database schem
 - Never generate, write, or run migrations: no `drizzle-kit generate`, `drizzle-kit migrate`, migration SQL files, or a `drizzle/` migrations folder.
 - Never add migration scripts to `package.json`.
 - This is a development project. There is no backwards compatibility and the data is worthless. Prefer data loss: never backfill, migrate or preserve existing rows, and never spend effort on keeping old data working. Every schema change means a clean slate.
+
+## Forms
+
+Reference implementation: `db/schema.ts` (`insertBotSchema`, `createBotSchema`), `actions/bot.ts`, `components/bot-dialog.tsx`.
+
+### Schema
+
+- Derive validation from the table with `createInsertSchema` from `drizzle-zod`, in `db/schema.ts` next to the table. Never hand-write a zod object that duplicates columns.
+- Put field rules (trim, min, max, messages) in the `createInsertSchema` refinements, not in the form or the action.
+- Export a form schema that `.pick()`s only the fields the user fills in. Server-owned fields (`id`, `userId`, `createdAt`, provider IDs) never appear in it. Use `.required()` for columns that have a `$defaultFn` but that the form always sends.
+- Export the form type as `z.infer<typeof schema>` and use that one type in the form, the action, and the action's error shape.
+- Avoid zod transforms in form schemas: they split input and output types and break react-hook-form typing. `.trim()` is fine; turn empty strings into `null` in the action.
+
+### Server actions
+
+- One file per resource in `actions/` (`actions/bot.ts`) with `"use server"`. Export only async functions from it; schemas and types live in `db/schema.ts`.
+- Call `await auth()` from `@clerk/nextjs/server` first and return early unless `isAuthenticated`. Take `userId` from `auth()`, never from the client.
+- Validate again on the server with `schema.safeParse(input)`, even though the client already validated.
+- Return a result union instead of throwing for expected failures: `{ ok: true, ... } | { ok: false, error, fieldErrors? }`, with `fieldErrors` from `z.flattenError(error).fieldErrors`.
+- Revalidate the affected routes (`revalidatePath`) after a mutation. Check `node_modules/next/dist/docs/` for the current caching APIs.
+
+### Form components
+
+- Client components using `react-hook-form` with `zodResolver(schema)` from `@hookform/resolvers/zod` and the shared form type: `useForm<CreateBot>()`.
+- Lay out fields with shadcn `FieldGroup` + `Field` + `FieldLabel`, and render each input through `Controller`. Set `data-invalid` on `Field` and `aria-invalid` on the control, and show errors with `<FieldError errors={[fieldState.error]} />`.
+- Give every control an `id` that matches its label's `htmlFor`. Nullable text columns need `value={field.value ?? ""}`.
+- Use `useWatch` for values the UI depends on. Derive UI state, such as which template is selected, from form values instead of keeping a separate `useState`.
+- Option sets (2 to 7 choices) use `ToggleGroup`, not a loop of `Button`s.
+- On submit, call the action and map `fieldErrors` back with `form.setError`. Report the overall result with `toast.add` from `@/components/ui/toast`.
+- Submit buttons show a `Spinner` with `data-icon="inline-start"` and are `disabled` while `form.formState.isSubmitting`.
+
+### Forms in dialogs
+
+- The dialog owns its `open` state and takes its trigger as a prop (`trigger: ReactElement`) passed to `DialogTrigger render`, so server components can supply the button.
+- Put the `<form id="...">` inside `DialogContent` and the actions in `DialogFooter`, linked with `form="..."` on the submit button. Cancel is `DialogClose render={<Button variant="outline" />}`.
+- Close the dialog on success, and reset the form in `onOpenChangeComplete` once it has closed, so the reset doesn't show during the close animation.
+
+### Dependencies
+
+- `@hookform/resolvers` fails to install with npm because of optional peer dependencies the project doesn't use. Install it, and anything that installs alongside it, with `--legacy-peer-deps`.
+
 ## DiceBear
 
 Use DiceBear 10. Documentation: https://www.dicebear.com/llms.txt
