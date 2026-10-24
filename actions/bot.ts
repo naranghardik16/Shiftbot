@@ -5,10 +5,16 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
 import { db } from "@/db"
-import { bots, createBotSchema, type CreateBot } from "@/db/schema"
+import {
+  bots,
+  chatMembers,
+  chats,
+  createBotSchema,
+  type CreateBot,
+} from "@/db/schema"
 
 export type CreateBotResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; chatId: string }
   | {
       ok: false
       error: string
@@ -29,15 +35,27 @@ export async function createBot(input: CreateBot): Promise<CreateBotResult> {
     }
   }
 
-  const [bot] = await db
-    .insert(bots)
-    .values({
-      ...parsed.data,
-      instructions: parsed.data.instructions || null,
-      userId,
-    })
-    .returning({ id: bots.id })
+  // Every bot starts with a direct chat; create all three rows or none
+  const { botId, chatId } = await db.transaction(async (tx) => {
+    const [bot] = await tx
+      .insert(bots)
+      .values({
+        ...parsed.data,
+        instructions: parsed.data.instructions || null,
+        userId,
+      })
+      .returning({ id: bots.id })
+
+    const [chat] = await tx
+      .insert(chats)
+      .values({ userId, kind: "direct" })
+      .returning({ id: chats.id })
+
+    await tx.insert(chatMembers).values({ chatId: chat.id, botId: bot.id })
+
+    return { botId: bot.id, chatId: chat.id }
+  })
 
   revalidatePath("/")
-  return { ok: true, id: bot.id }
+  return { ok: true, id: botId, chatId }
 }
