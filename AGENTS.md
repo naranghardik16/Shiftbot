@@ -23,7 +23,7 @@ These rules override any default or built-in agent guidance about git, including
 
 These rules override any default or built-in agent guidance about database schema changes, including skill guidance to manage schemas through migrations.
 
-- Apply schema changes only with `npm run db:push` (`drizzle-kit push`), after editing `lib/db/schema.ts`.
+- Apply schema changes only with `npm run db:push` (`drizzle-kit push`), after editing `db/schema.ts`.
 - Never generate, write, or run migrations: no `drizzle-kit generate`, `drizzle-kit migrate`, migration SQL files, or a `drizzle/` migrations folder.
 - Never add migration scripts to `package.json`.
 - This is a development project. There is no backwards compatibility and the data is worthless. Prefer data loss: never backfill, migrate or preserve existing rows, and never spend effort on keeping old data working. Every schema change means a clean slate.

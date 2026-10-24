@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL_UNPOOLED) {
 }
 
 export default defineConfig({
-  schema: "./lib/db/schema.ts",
+  schema: "./db/schema.ts",
   dialect: "postgresql",
   // Direct (non-pooled) connection: schema changes need session state PgBouncer drops
   dbCredentials: { url: process.env.DATABASE_URL_UNPOOLED },
