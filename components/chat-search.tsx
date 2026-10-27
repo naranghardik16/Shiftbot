@@ -50,7 +50,7 @@ export function ChatSearch({ chats }: { chats: ChatListItem[] }) {
       <Button
         variant="outline"
         onClick={() => setOpen(true)}
-        className="h-8 w-full min-w-0 justify-start rounded-lg border-input bg-transparent px-2.5 py-1 text-base font-normal text-muted-foreground transition-colors md:text-sm dark:bg-input/30"
+        className="h-8 w-full min-w-0 justify-start rounded-lg border-input bg-transparent px-2.5 py-1 text-base font-normal text-muted-foreground transition-colors group-data-[collapsible=icon]:hidden md:text-sm dark:bg-input/30"
       >
         <SearchIcon data-icon="inline-start" />
         Search
@@ -58,6 +58,16 @@ export function ChatSearch({ chats }: { chats: ChatListItem[] }) {
           <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>
+      </Button>
+      {/* The collapsed sidebar only has room for the icon */}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Search"
+        onClick={() => setOpen(true)}
+        className="hidden group-data-[collapsible=icon]:inline-flex"
+      >
+        <SearchIcon />
       </Button>
       <CommandDialog
         open={open}

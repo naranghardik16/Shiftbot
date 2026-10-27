@@ -29,6 +29,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   sidebarMenuButtonVariants,
 } from "@/components/ui/sidebar"
 import type { ChatListItem } from "@/queries/bot"
@@ -38,7 +39,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
   const [botDialog] = useState(() => DialogPrimitive.createHandle())
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -78,6 +79,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
                     <SidebarMenuButton
                       size="lg"
                       className="h-auto gap-3"
+                      tooltip={chat.name}
                       render={<Link href={`/chats/${chat.id}`} />}
                     >
                       <ChatAvatar seed={chat.avatar} />
@@ -122,16 +124,18 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
                     "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground"
                   ),
                   userButtonBox:
-                    "w-full min-w-0 flex-row-reverse justify-end gap-2",
-                  userButtonAvatarBox: "size-6 shrink-0",
+                    "w-full min-w-0 flex-row-reverse justify-end gap-2 group-data-[collapsible=icon]:justify-center",
+                  userButtonAvatarBox:
+                    "size-6 shrink-0 group-data-[collapsible=icon]:size-8",
                   userButtonOuterIdentifier:
-                    "truncate ps-0 text-sm font-medium text-inherit",
+                    "truncate ps-0 text-sm font-medium text-inherit group-data-[collapsible=icon]:hidden",
                 },
               }}
             />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
