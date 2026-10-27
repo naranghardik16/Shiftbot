@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { UserButton } from "@clerk/nextjs"
 import { cn } from "cn"
@@ -9,6 +10,7 @@ import { PlusIcon, UsersIcon } from "lucide-react"
 
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
+import { ChatSearch } from "@/components/chat-search"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -37,7 +39,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
 
   return (
     <Sidebar>
-      <SidebarHeader className="flex-row justify-end">
+      <SidebarHeader>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -45,7 +47,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
                 variant="ghost"
                 size="icon"
                 aria-label="Create"
-                className="aria-expanded:not-hover:bg-transparent"
+                className="self-end aria-expanded:not-hover:bg-transparent"
               />
             }
           >
@@ -63,6 +65,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
           </DropdownMenuContent>
         </DropdownMenu>
         <BotDialog handle={botDialog} />
+        <ChatSearch chats={chats} />
       </SidebarHeader>
       <SidebarContent>
         {chats.length > 0 && (
@@ -72,7 +75,11 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
               <SidebarMenu>
                 {chats.map((chat) => (
                   <SidebarMenuItem key={chat.id}>
-                    <SidebarMenuButton size="lg" className="h-auto gap-3">
+                    <SidebarMenuButton
+                      size="lg"
+                      className="h-auto gap-3"
+                      render={<Link href={`/chats/${chat.id}`} />}
+                    >
                       <ChatAvatar seed={chat.avatar} />
                       <div className="flex min-w-0 flex-1 flex-col">
                         <div className="flex items-baseline gap-2">
