@@ -5,6 +5,14 @@ import { cn } from "cn"
 
 const style = new Style(definition)
 
+// Data URI of the bot face generated from a seed
+function chatAvatarSrc(seed: string, animated = false) {
+  return new Avatar(style, {
+    seed,
+    ...(animated && { tags: ["animation"] }),
+  }).toDataUri()
+}
+
 function ChatAvatar({
   seed,
   animated = false,
@@ -14,10 +22,7 @@ function ChatAvatar({
   animated?: boolean
   className?: string
 }) {
-  const src = new Avatar(style, {
-    seed,
-    ...(animated && { tags: ["animation"] }),
-  }).toDataUri()
+  const src = chatAvatarSrc(seed, animated)
 
   return (
     <Image
@@ -32,4 +37,4 @@ function ChatAvatar({
   )
 }
 
-export { ChatAvatar }
+export { ChatAvatar, chatAvatarSrc }

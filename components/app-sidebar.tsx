@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useParams } from "next/navigation"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { UserButton } from "@clerk/nextjs"
 import { cn } from "cn"
@@ -37,6 +38,7 @@ import type { ChatListItem } from "@/queries/bot"
 export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
   // The menu unmounts its items on close, so they open the dialog through a handle
   const [botDialog] = useState(() => DialogPrimitive.createHandle())
+  const { chatId } = useParams<{ chatId?: string }>()
 
   return (
     <Sidebar collapsible="icon">
@@ -80,6 +82,7 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
                       size="lg"
                       className="h-auto gap-3"
                       tooltip={chat.name}
+                      isActive={chat.id === chatId}
                       render={<Link href={`/chats/${chat.id}`} />}
                     >
                       <ChatAvatar seed={chat.avatar} />
