@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, type ReactElement } from "react"
+import type { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ShuffleIcon } from "lucide-react"
 import { Controller, useForm, useWatch } from "react-hook-form"
@@ -63,7 +64,14 @@ function emptyBot(): CreateBot {
   return { name: "", avatar: newSeed(), job: "", instructions: "" }
 }
 
-function BotDialog({ trigger }: { trigger: ReactElement }) {
+function BotDialog({
+  trigger,
+  handle,
+}: {
+  trigger?: ReactElement
+  // Lets triggers that unmount before the dialog opens, like menu items, open it
+  handle?: DialogPrimitive.Handle<unknown>
+}) {
   const [open, setOpen] = useState(false)
   const form = useForm<CreateBot>({
     resolver: zodResolver(createBotSchema),
@@ -96,8 +104,9 @@ function BotDialog({ trigger }: { trigger: ReactElement }) {
       open={open}
       onOpenChange={setOpen}
       onOpenChangeComplete={(open) => !open && form.reset(emptyBot())}
+      handle={handle}
     >
-      <DialogTrigger render={trigger} />
+      {trigger && <DialogTrigger render={trigger} />}
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New bot</DialogTitle>

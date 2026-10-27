@@ -56,6 +56,7 @@ export async function createBot(input: CreateBot): Promise<CreateBotResult> {
     return { botId: bot.id, chatId: chat.id }
   })
 
-  revalidatePath("/")
+  // The chat list lives in the dashboard layout, so refresh it on every route
+  revalidatePath("/", "layout")
   return { ok: true, id: botId, chatId }
 }
