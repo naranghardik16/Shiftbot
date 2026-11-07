@@ -33,7 +33,11 @@ function screenshotToModel({ output }: { output: Screenshot }) {
 }
 
 const coordinates = {
-  x: z.number().int().min(0).describe("Pixels from the left edge of the screen"),
+  x: z
+    .number()
+    .int()
+    .min(0)
+    .describe("Pixels from the left edge of the screen"),
   y: z.number().int().min(0).describe("Pixels from the top edge of the screen"),
 }
 
@@ -77,7 +81,10 @@ export function createComputerTools({ sandbox, desktop }: SandboxAccess) {
           undefined,
           timeout
         )
-        return { exitCode: response.exitCode, output: truncate(response.result) }
+        return {
+          exitCode: response.exitCode,
+          output: truncate(response.result),
+        }
       },
     }),
 
@@ -138,13 +145,21 @@ export function createComputerTools({ sandbox, desktop }: SandboxAccess) {
       }),
       execute: async ({ x, y, button, double, modifiers }) => {
         const box = await desktop()
-        await box.computerUse.mouse.click(x, y, button, double, undefined, modifiers)
+        await box.computerUse.mouse.click(
+          x,
+          y,
+          button,
+          double,
+          undefined,
+          modifiers
+        )
         return { x, y, button, double }
       },
     }),
 
     mouse_move: tool({
-      description: "Move the mouse pointer to a point on your desktop, e.g. to hover.",
+      description:
+        "Move the mouse pointer to a point on your desktop, e.g. to hover.",
       inputSchema: z.object(coordinates),
       execute: async ({ x, y }) => {
         const box = await desktop()
@@ -154,7 +169,8 @@ export function createComputerTools({ sandbox, desktop }: SandboxAccess) {
     }),
 
     mouse_drag: tool({
-      description: "Press the mouse at one point, drag it to another and release.",
+      description:
+        "Press the mouse at one point, drag it to another and release.",
       inputSchema: z.object({
         fromX: coordinates.x,
         fromY: coordinates.y,
@@ -232,3 +248,38 @@ export function createComputerTools({ sandbox, desktop }: SandboxAccess) {
 }
 
 export type ComputerTools = ReturnType<typeof createComputerTools>
+
+// Another member of the group chat, or null if the id isn't one
+type FindOtherMember = (
+  botId: string
+) => Promise<{ id: string; name: string } | null>
+
+// Group chats only. The bot's turn ends on this call, and the browser then
+// asks the chosen bot to answer the same message in a reply of its own
+export function createHandoffTool(findOtherMember: FindOtherMember) {
+  return {
+    handoff: tool({
+      description:
+        "Hand the person's latest message to another bot in this group chat whose job fits it clearly better. That bot answers it next, in its own reply and on its own computer. Your turn ends when you call this, so don't start the work yourself.",
+      inputSchema: z.object({
+        botId: z
+          .string()
+          .describe("The id of the bot to hand off to, from the member list"),
+        reason: z
+          .string()
+          .describe(
+            "In a sentence, why that bot fits better. The person and that bot both see it"
+          ),
+      }),
+      execute: async ({ botId }) => {
+        const bot = await findOtherMember(botId)
+        if (!bot) {
+          throw new Error(`No other bot in this group chat has the id ${botId}`)
+        }
+        return { botId: bot.id, name: bot.name }
+      },
+    }),
+  }
+}
+
+export type HandoffTools = ReturnType<typeof createHandoffTool>

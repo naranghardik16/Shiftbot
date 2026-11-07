@@ -6,7 +6,7 @@ import {
   useTriggerChatTransport,
 } from "@trigger.dev/sdk/chat/react"
 import type { ReactNode } from "react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { BundledLanguage } from "shiki"
 
 import {
@@ -117,6 +117,24 @@ function ChatView({
     messages: initialMessages,
   })
 
+  // When a reply ends in a handoff, ask the chosen bot to answer the same
+  // message. Also picks up a handoff left pending by a closed tab
+  const handedOff = useRef(new Set<string>())
+  useEffect(() => {
+    if (status !== "ready") return
+    const last = messages.at(-1)
+    if (last?.role !== "assistant" || handedOff.current.has(last.id)) return
+    const handoff = last.parts.findLast((part) => part.type === "tool-handoff")
+    if (handoff?.state !== "output-available") return
+
+    handedOff.current.add(last.id)
+    // The action's metadata reaches the agent as that turn's clientData
+    sendMessage(undefined, {
+      body: { action: { type: "handoff" } },
+      metadata: { botId: handoff.output.botId },
+    })
+  }, [status, messages, sendMessage])
+
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
     // Per-message metadata reaches the agent as this turn's clientData
@@ -131,13 +149,8 @@ function ChatView({
           {messages.length === 0 ? (
             <ConversationEmptyState description="Send a message to start chatting" />
           ) : (
-            messages.map((message) => (
-              <Message from={message.role} key={message.id}>
-                {isGroup && message.role === "assistant" && (
-                  <BotByline
-                    bot={bots.find((bot) => bot.id === message.metadata?.botId)}
-                  />
-                )}
+            messages.map((message) => {
+              const content = (
                 <MessageContent>
                   {message.parts.map((part, i) => {
                     const key = `${message.id}-${i}`
@@ -152,8 +165,36 @@ function ChatView({
                     return null
                   })}
                 </MessageContent>
-              </Message>
-            ))
+              )
+
+              // In group chats, a reply sits beside the face of the bot that
+              // wrote it; older replies may name a bot that has since left
+              const bot =
+                isGroup && message.role === "assistant"
+                  ? bots.find((bot) => bot.id === message.metadata?.botId)
+                  : undefined
+              if (!bot) {
+                return (
+                  <Message from={message.role} key={message.id}>
+                    {content}
+                  </Message>
+                )
+              }
+
+              return (
+                <Message
+                  from={message.role}
+                  key={message.id}
+                  className="flex-row items-start gap-3"
+                >
+                  <ChatAvatar seed={bot.avatar} />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-sm font-medium">{bot.name}</span>
+                    {content}
+                  </div>
+                </Message>
+              )
+            })
           )}
         </ConversationContent>
         <ConversationScrollButton />
@@ -210,17 +251,6 @@ function BotLabel({ bot }: { bot?: ChatBot }) {
       <ChatAvatar seed={bot.avatar} className="size-4" />
       {bot.name}
     </>
-  )
-}
-
-// Who wrote a reply in a group chat; older replies may name a bot that left
-function BotByline({ bot }: { bot?: ChatBot }) {
-  if (!bot) return null
-  return (
-    <div className="flex items-center gap-2 text-sm font-medium">
-      <ChatAvatar seed={bot.avatar} className="size-5" />
-      {bot.name}
-    </div>
   )
 }
 
@@ -366,6 +396,18 @@ function ToolCall({ part }: { part: ToolPart }) {
       const keys = [...(part.input?.modifiers ?? []), part.input?.key ?? ""]
       return <ToolRow part={part} title={`Pressed ${keys.join("+")}`} />
     }
+
+    case "tool-handoff":
+      return (
+        <ToolRow
+          part={part}
+          title={done ? `Handed off to ${part.output.name}` : "Handing off"}
+        >
+          {part.input?.reason && (
+            <p className="text-sm text-muted-foreground">{part.input.reason}</p>
+          )}
+        </ToolRow>
+      )
 
     // The bot's own look at the screen; the image stays out of the chat
     case "tool-view_screen":
