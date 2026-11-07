@@ -53,6 +53,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool"
 import { ChatAvatar } from "@/components/chat-avatar"
+import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
@@ -137,8 +138,12 @@ function ChatView({
 
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
-    // Per-message metadata reaches the agent as this turn's clientData
-    sendMessage({ text: message.text }, { metadata: { botId } })
+    // The request metadata reaches the agent as this turn's clientData; the
+    // message's own metadata is saved with it, so it can show who it was for
+    sendMessage(
+      { text: message.text, metadata: { botId } },
+      { metadata: { botId } }
+    )
     setText("")
   }
 
@@ -150,20 +155,47 @@ function ChatView({
             <ConversationEmptyState description="Send a message to start chatting" />
           ) : (
             messages.map((message) => {
+              // In group chats, a message starts with the bot it was sent to
+              const recipient =
+                isGroup && message.role === "user"
+                  ? bots.find((bot) => bot.id === message.metadata?.botId)
+                  : undefined
+
+              const parts = message.parts.map((part, i) => {
+                const key = `${message.id}-${i}`
+                if (part.type === "text") {
+                  return (
+                    <MessageResponse key={key}>{part.text}</MessageResponse>
+                  )
+                }
+                if (part.type.startsWith("tool-")) {
+                  return <ToolCall key={key} part={part as ToolPart} />
+                }
+                return null
+              })
+
               const content = (
                 <MessageContent>
-                  {message.parts.map((part, i) => {
-                    const key = `${message.id}-${i}`
-                    if (part.type === "text") {
-                      return (
-                        <MessageResponse key={key}>{part.text}</MessageResponse>
-                      )
-                    }
-                    if (part.type.startsWith("tool-")) {
-                      return <ToolCall key={key} part={part as ToolPart} />
-                    }
-                    return null
-                  })}
+                  {recipient ? (
+                    // A block wrapper, since floats don't flow in the flex
+                    // column: the tag sits on the text's first line, like a
+                    // mention, and the rest of the text wraps around it
+                    <div>
+                      <Badge
+                        variant="outline"
+                        className="float-left me-1.5 max-w-40 gap-1 pl-1"
+                      >
+                        <ChatAvatar
+                          seed={recipient.avatar}
+                          className="size-3.5"
+                        />
+                        <span className="truncate">{recipient.name}</span>
+                      </Badge>
+                      {parts}
+                    </div>
+                  ) : (
+                    parts
+                  )}
                 </MessageContent>
               )
 
