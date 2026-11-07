@@ -1,15 +1,14 @@
 "use client"
 
-import { useId, useState, type ReactElement } from "react"
+import { useState, type ReactElement } from "react"
 import { useRouter } from "next/navigation"
 import type { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Controller, useForm } from "react-hook-form"
+import { useForm } from "react-hook-form"
 
 import { createGroupChat } from "@/actions/chat"
-import { ChatAvatar } from "@/components/chat-avatar"
+import { GroupChatFields } from "@/components/group-chat-fields"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogClose,
@@ -20,16 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { FieldGroup } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { createGroupChatSchema, type CreateGroupChat } from "@/db/schema"
@@ -47,7 +37,6 @@ function GroupChatDialog({
   // Lets triggers that unmount before the dialog opens, like menu items, open it
   handle?: DialogPrimitive.Handle<unknown>
 }) {
-  const id = useId()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const form = useForm<CreateGroupChat>({
@@ -86,67 +75,7 @@ function GroupChatDialog({
         </DialogHeader>
         <form id="group-chat-form" onSubmit={form.handleSubmit(onSubmit)}>
           <FieldGroup>
-            <Controller
-              name="name"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-                  <Input
-                    {...field}
-                    id={`${id}-name`}
-                    placeholder="Weekend plans"
-                    autoComplete="off"
-                    aria-invalid={fieldState.invalid}
-                  />
-                  <FieldError errors={[fieldState.error]} />
-                </Field>
-              )}
-            />
-            <Controller
-              name="botIds"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <FieldSet data-invalid={fieldState.invalid}>
-                  <FieldLegend variant="label">Bots</FieldLegend>
-                  {bots.length < 2 && (
-                    <FieldDescription>
-                      A group needs at least two bots. Create another one first.
-                    </FieldDescription>
-                  )}
-                  <FieldGroup data-slot="checkbox-group">
-                    {bots.map((bot) => (
-                      <Field
-                        key={bot.id}
-                        orientation="horizontal"
-                        data-invalid={fieldState.invalid}
-                      >
-                        <Checkbox
-                          id={`${id}-bot-${bot.id}`}
-                          checked={field.value.includes(bot.id)}
-                          onCheckedChange={(checked) =>
-                            field.onChange(
-                              checked
-                                ? [...field.value, bot.id]
-                                : field.value.filter((id) => id !== bot.id)
-                            )
-                          }
-                          aria-invalid={fieldState.invalid}
-                        />
-                        <FieldLabel
-                          htmlFor={`${id}-bot-${bot.id}`}
-                          className="items-center font-normal"
-                        >
-                          <ChatAvatar seed={bot.avatar} className="size-6" />
-                          {bot.name}
-                        </FieldLabel>
-                      </Field>
-                    ))}
-                  </FieldGroup>
-                  <FieldError errors={[fieldState.error]} />
-                </FieldSet>
-              )}
-            />
+            <GroupChatFields form={form} bots={bots} />
           </FieldGroup>
         </form>
         <DialogFooter>

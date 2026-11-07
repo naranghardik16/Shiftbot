@@ -1,22 +1,48 @@
 import { chatAvatarSrc } from "@/components/chat-avatar"
 import { DesktopPanelToggle } from "@/components/desktop-panel"
 import { EditBotDialog } from "@/components/edit-bot-dialog"
+import { EditGroupChatDialog } from "@/components/edit-group-chat-dialog"
 import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import type { BotListItem } from "@/queries/bot"
 import type { ChatDetail } from "@/queries/chat"
 
-export function ChatHeader({ chat }: { chat: ChatDetail }) {
-  // Group chats have no single bot to edit and no desktop to show
+export function ChatHeader({
+  chat,
+  bots,
+}: {
+  chat: ChatDetail
+  // Every bot the user has, for picking a group's members
+  bots: BotListItem[]
+}) {
+  // Group chats edit the group, not a bot, and have no desktop to show
   if (chat.kind === "group") {
     return (
       <header className="flex h-12 shrink-0 items-center gap-2 px-4">
-        <h1 className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <GroupChatAvatar
-            seeds={chat.bots.map((bot) => bot.avatar)}
-            className="size-6"
+        <h1 className="-ms-2.5 min-w-0">
+          <EditGroupChatDialog
+            chat={{
+              id: chat.id,
+              name: chat.name,
+              botIds: chat.bots.map((bot) => bot.id),
+            }}
+            bots={bots}
+            trigger={
+              <Button
+                variant="ghost"
+                size="lg"
+                aria-label={`Edit ${chat.name}`}
+                className="max-w-full justify-start"
+              >
+                <GroupChatAvatar
+                  seeds={chat.bots.map((bot) => bot.avatar)}
+                  className="size-6"
+                />
+                <span className="truncate">{chat.name}</span>
+              </Button>
+            }
           />
-          <span className="truncate">{chat.name}</span>
         </h1>
       </header>
     )

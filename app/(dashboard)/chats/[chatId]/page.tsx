@@ -8,11 +8,12 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { getBots } from "@/queries/bot"
 import { getChat } from "@/queries/chat"
 
 export default async function Page(props: PageProps<"/chats/[chatId]">) {
   const { chatId } = await props.params
-  const chat = await getChat(chatId)
+  const [chat, allBots] = await Promise.all([getChat(chatId), getBots()])
   if (!chat) notFound()
 
   const bots = chat.bots.map(({ id, name, avatar }) => ({ id, name, avatar }))
@@ -21,7 +22,7 @@ export default async function Page(props: PageProps<"/chats/[chatId]">) {
   if (chat.kind === "group") {
     return (
       <div className="flex h-svh flex-col">
-        <ChatHeader chat={chat} />
+        <ChatHeader chat={chat} bots={allBots} />
         <Chat key={chat.id} id={chat.id} bots={bots} />
       </div>
     )
@@ -36,7 +37,7 @@ export default async function Page(props: PageProps<"/chats/[chatId]">) {
         <ResizablePanelGroup orientation="horizontal">
           <ResizablePanel id="chat" minSize="30%">
             <div className="flex h-full flex-col">
-              <ChatHeader chat={chat} />
+              <ChatHeader chat={chat} bots={allBots} />
               <Chat key={chat.id} id={chat.id} bots={bots} />
             </div>
           </ResizablePanel>

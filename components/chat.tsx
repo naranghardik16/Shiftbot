@@ -110,7 +110,9 @@ function ChatView({
 }) {
   const [text, setText] = useState("")
   // The bot the next message goes to; only group chats offer a choice
-  const [botId, setBotId] = useState(bots[0].id)
+  const [pickedId, setPickedId] = useState(bots[0].id)
+  // The picked bot may have been removed from the group since
+  const botId = bots.some((bot) => bot.id === pickedId) ? pickedId : bots[0].id
   const isGroup = bots.length > 1
   const { messages, status, sendMessage, stop } = useChat<ChatUIMessage>({
     id,
@@ -245,7 +247,7 @@ function ChatView({
               <PromptInputSelect
                 value={botId}
                 onValueChange={(value) =>
-                  typeof value === "string" && setBotId(value)
+                  typeof value === "string" && setPickedId(value)
                 }
               >
                 <PromptInputSelectTrigger aria-label="Bot to talk to">

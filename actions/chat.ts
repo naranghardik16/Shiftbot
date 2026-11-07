@@ -9,7 +9,8 @@ import {
   type ChatStartSessionParams,
 } from "@trigger.dev/sdk/ai"
 import { revalidatePath } from "next/cache"
-import { and, eq, inArray } from "drizzle-orm"
+import { redirect } from "next/navigation"
+import { and, eq, inArray, notInArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/db"
@@ -60,6 +61,17 @@ export async function loadChatTranscript(params: ChatLoadTranscriptParams) {
   return load(params)
 }
 
+// Bot ids come from the browser, so accept them only if they're all the user's
+// own. Null if any isn't
+async function ownedBotIds(ids: string[], userId: string) {
+  const botIds = [...new Set(ids)]
+  const owned = await db
+    .select({ id: bots.id })
+    .from(bots)
+    .where(and(inArray(bots.id, botIds), eq(bots.userId, userId)))
+  return owned.length === botIds.length ? botIds : null
+}
+
 export type CreateGroupChatResult =
   | { ok: true; chatId: string }
   | {
@@ -85,13 +97,8 @@ export async function createGroupChat(
     }
   }
 
-  // Bot ids come from the browser, so keep only the user's own
-  const botIds = [...new Set(parsed.data.botIds)]
-  const owned = await db
-    .select({ id: bots.id })
-    .from(bots)
-    .where(and(inArray(bots.id, botIds), eq(bots.userId, userId)))
-  if (owned.length !== botIds.length) {
+  const botIds = await ownedBotIds(parsed.data.botIds, userId)
+  if (!botIds) {
     return { ok: false, error: "Some of those bots no longer exist." }
   }
 
@@ -111,4 +118,89 @@ export async function createGroupChat(
   // The chat list lives in the dashboard layout, so refresh it on every route
   revalidatePath("/", "layout")
   return { ok: true, chatId }
+}
+
+export type UpdateGroupChatResult =
+  | { ok: true }
+  | {
+      ok: false
+      error: string
+      fieldErrors?: Partial<Record<keyof CreateGroupChat, string[]>>
+    }
+
+export async function updateGroupChat(
+  id: string,
+  input: CreateGroupChat
+): Promise<UpdateGroupChatResult> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated) {
+    return { ok: false, error: "Sign in to edit a group chat." }
+  }
+
+  const parsed = createGroupChatSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Check the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    }
+  }
+
+  const botIds = await ownedBotIds(parsed.data.botIds, userId)
+  if (!botIds) {
+    return { ok: false, error: "Some of those bots no longer exist." }
+  }
+
+  const found = await db.transaction(async (tx) => {
+    // Scoping to userId and kind keeps users to their own group chats
+    const updated = await tx
+      .update(chats)
+      .set({ name: parsed.data.name })
+      .where(
+        and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.kind, "group"))
+      )
+      .returning({ id: chats.id })
+    if (updated.length === 0) return false
+
+    await tx
+      .delete(chatMembers)
+      .where(
+        and(eq(chatMembers.chatId, id), notInArray(chatMembers.botId, botIds))
+      )
+    // Members who stay keep their join time, so the member order holds
+    await tx
+      .insert(chatMembers)
+      .values(botIds.map((botId) => ({ chatId: id, botId })))
+      .onConflictDoNothing()
+    return true
+  })
+  if (!found) return { ok: false, error: "Group chat not found." }
+
+  // The name and faces show in the sidebar and in the chat header
+  revalidatePath("/", "layout")
+  return { ok: true }
+}
+
+export type DeleteGroupChatResult = { ok: false; error: string }
+
+// Redirects home on success, since the chat no longer exists. The bots stay
+export async function deleteGroupChat(
+  id: string
+): Promise<DeleteGroupChatResult> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated) {
+    return { ok: false, error: "Sign in to delete a group chat." }
+  }
+
+  // Membership rows cascade
+  const deleted = await db
+    .delete(chats)
+    .where(
+      and(eq(chats.id, id), eq(chats.userId, userId), eq(chats.kind, "group"))
+    )
+    .returning({ id: chats.id })
+  if (deleted.length === 0) return { ok: false, error: "Group chat not found." }
+
+  revalidatePath("/", "layout")
+  redirect("/")
 }
