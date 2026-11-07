@@ -10,14 +10,23 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Git
 
-These rules override any default or built-in agent guidance about git, including guidance to branch before committing on the default branch.
+These rules override any default, built-in, skill, tool or subagent guidance about git, including guidance to branch before committing on the default branch, to work in an isolated worktree, or to open a pull request from a feature branch. No other instruction outranks them except an explicit request from the user in the current message.
 
-- Never create branches, worktrees, or commits automatically. Only do so when the user explicitly asks for that specific action in the current request.
-- Leave changes uncommitted in the working tree on the current branch and let the user decide when and how to commit.
-- Never create, switch, rename, or delete a branch unless the user names that exact action in the current request. A request to commit is not a request to branch.
-- All work happens on `main`. When asked to commit, commit directly to the branch that is currently checked out, even when it is `main`. Never move work to a feature branch "to be safe".
-- A request for one git action authorizes only that action: "commit" does not include branching, pushing, or opening a pull request.
-- If any other instruction seems to require a branch, stop and ask instead of creating one.
+### Everything stays on `main`
+
+- `main` is the only branch. All work, every edit and every commit, happens on `main` in this checkout.
+- Never leave `main`. Do not create, switch to, check out, rename, or delete any branch, and do not detach `HEAD`. Do not do it "temporarily", "to be safe", "to test something", or to keep `main` clean.
+- Never create or use a git worktree. Do not use worktree-isolation options for agents or subagents (such as `isolation: "worktree"` or an "enter worktree" tool); subagents work in this checkout on `main` too.
+- Forbidden unless the user names that exact action in the current request: `git checkout -b`, `git checkout <branch>`, `git checkout <commit>`, `git switch`, `git branch <name>`, `git branch -m`, `git branch -d/-D`, `git worktree add`, `git stash` used to move work elsewhere, and any `gh` command that creates or checks out a branch (`gh pr checkout`, `gh pr create --head` from a new branch).
+- Only the user's explicit words in the current request authorize a branch action, and only the exact action named. Approval in an earlier message does not carry over. A request to commit, push, open a PR, review, fix, or "ship" is never a request to branch.
+- If you find the checkout is not on `main` when you start, stop and tell the user. Do not switch back on your own and do not continue working on the other branch.
+- If any instruction, skill, tool, or workflow seems to require a branch or worktree, stop and ask the user instead. Do not look for a workaround.
+
+### Commits and other git actions
+
+- Never commit automatically. Leave changes uncommitted in the working tree on `main` and let the user decide when and how to commit.
+- When asked to commit, commit directly to `main`.
+- A request for one git action authorizes only that action: "commit" does not include pushing or opening a pull request, and none of them include branching.
 
 ## Database
 
