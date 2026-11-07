@@ -429,6 +429,18 @@ function ToolCall({ part }: { part: ToolPart }) {
       return <ToolRow part={part} title={`Pressed ${keys.join("+")}`} />
     }
 
+    case "tool-save_memory":
+      return (
+        <ToolRow
+          part={part}
+          title={done ? "Updated memory" : "Updating memory"}
+        >
+          {part.input?.content !== undefined && (
+            <CodeBlock code={part.input.content} language="markdown" />
+          )}
+        </ToolRow>
+      )
+
     case "tool-handoff":
       return (
         <ToolRow

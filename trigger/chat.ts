@@ -12,8 +12,12 @@ import { z } from "zod"
 
 import { db } from "@/db"
 import { bots, chatMembers, chats, type Bot } from "@/db/schema"
-import { sandboxAccess } from "@/lib/sandbox"
-import { createComputerTools, createHandoffTool } from "./tools"
+import { readMemory, sandboxAccess } from "@/lib/sandbox"
+import {
+  createComputerTools,
+  createHandoffTool,
+  createMemoryTool,
+} from "./tools"
 
 // Which bot wrote a reply, so group chats can show its face and name
 export type ChatMessageMetadata = { botId?: string }
@@ -80,10 +84,12 @@ async function loadTurn(chatId: string, botId?: string): Promise<Turn> {
 }
 
 function createChatTools(chatId: string, botId?: string) {
+  const access = sandboxAccess(
+    async () => (await loadTurn(chatId, botId)).bot.sandboxId
+  )
   return {
-    ...createComputerTools(
-      sandboxAccess(async () => (await loadTurn(chatId, botId)).bot.sandboxId)
-    ),
+    ...createComputerTools(access),
+    ...createMemoryTool(access),
     // Offered only in group chats; see activeTools in run
     ...createHandoffTool(async (targetId) => {
       const { group } = await loadTurn(chatId, botId)
@@ -118,7 +124,33 @@ function groupPrompt(
   ].join("\n\n")
 }
 
-function systemPrompt({ bot, group }: Turn, handedOff: boolean) {
+// memory is null when it couldn't be loaded this turn
+function memoryPrompt(memory: string | null, inGroup: boolean) {
+  const contents =
+    memory === null
+      ? `Your memory couldn't be loaded this turn. Don't call save_memory until it can be, or you'd overwrite it.`
+      : memory
+        ? `This is your memory as it stands now:\n\n<memory>\n${memory}\n</memory>`
+        : `Your memory is empty so far.`
+
+  return [
+    `You have a memory that carries over between conversations. Your conversations don't share history: your direct chat with the person and each group chat you're in show only their own messages, so what's in your memory is all you know from the others. Only you can see it.`,
+    contents,
+    `Rely on it: when the person asks about something that's in your memory, answer from it, even if it was said in a different conversation. Don't say you weren't told something that's in your memory.`,
+    `When the person tells you something worth knowing in a later conversation, such as facts about them, their preferences, decisions, ongoing work and where it stands, or anything they ask you to remember, call save_memory in the same turn. Pass the whole memory, as a short markdown list: what's already there, updated, plus the new entries. Remove or correct entries that have changed instead of adding contradicting ones. Skip small talk and anything only useful right now. Don't announce that you saved something unless they ask.`,
+    inGroup
+      ? `This group chat is with the same person as your direct chat, so use your memory freely here. Save only what the person says; another bot's messages are its own and aren't facts about the person.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function systemPrompt(
+  { bot, group }: Turn,
+  handedOff: boolean,
+  memory: string | null
+) {
   const { name, job, instructions } = bot
   return [
     `You are ${name}, a bot whose job is: ${job}.`,
@@ -129,10 +161,25 @@ function systemPrompt({ bot, group }: Turn, handedOff: boolean) {
     group ? groupPrompt(group, handedOff) : null,
     `You have your own computer: a private, isolated Linux sandbox hosted on Daytona, created for you when you were created and deleted along with you. It has its own filesystem, network and processes, and nobody else's work runs in it. It also has a desktop you can see and operate with the mouse and keyboard.`,
     `Use your computer when the job calls for it. Prefer the shell and file tools when they can do the work, and the desktop when something needs a graphical app. Look at the screen before you click or type, and again afterwards to check the result, since screen coordinates are only valid for what is currently shown. Your screenshots are private to you; show the screen only when the person asks to see it.`,
+    memoryPrompt(memory, group !== null),
     `Speak as ${name}, in the first person. Don't describe yourself as a generic AI assistant.`,
   ]
     .filter(Boolean)
     .join("\n\n")
+}
+
+// Read fresh every turn, since the bot's other chats may have changed it. A
+// failure shouldn't stop the bot from answering, so it's logged and the turn
+// goes on without memory
+async function loadMemory(bot: Member) {
+  try {
+    return await readMemory(
+      await sandboxAccess(async () => bot.sandboxId).sandbox()
+    )
+  } catch (error) {
+    console.error(`Failed to load memory for bot ${bot.id}`, error)
+    return null
+  }
 }
 
 // One durable run per chat; history is kept in the platform's transcript
@@ -168,7 +215,8 @@ export const chatAgent = chat
       const handedOff = trigger === "action-turn"
       const canHandOff = turn.group !== null && !handedOff
 
-      chat.prompt.set(systemPrompt(turn, handedOff))
+      const memory = await loadMemory(turn.bot)
+      chat.prompt.set(systemPrompt(turn, handedOff, memory))
       chat.setUIMessageStreamOptions({
         messageMetadata: ({ part }) =>
           part.type === "start" ? { botId: turn.bot.id } : undefined,

@@ -1,7 +1,7 @@
 import { tool } from "ai"
 import { z } from "zod"
 
-import type { SandboxAccess } from "@/lib/sandbox"
+import { writeMemory, type SandboxAccess } from "@/lib/sandbox"
 
 // Keep tool results small enough not to flood the model's context
 const MAX_OUTPUT = 20_000
@@ -248,6 +248,25 @@ export function createComputerTools({ sandbox, desktop }: SandboxAccess) {
 }
 
 export type ComputerTools = ReturnType<typeof createComputerTools>
+
+// The memory itself is loaded into the system prompt every turn, so there's
+// no tool to read it: the bot can't forget to look
+export function createMemoryTool({ sandbox }: SandboxAccess) {
+  return {
+    save_memory: tool({
+      description: `Replace your memory with new contents. Your memory is shown to you at the start of every conversation, direct or group, so this is how you remember things beyond the current one. Pass the whole memory: everything you want to keep, plus what's new or changed, as a short markdown list.`,
+      inputSchema: z.object({
+        content: z
+          .string()
+          .describe("The complete new memory, replacing the old one"),
+      }),
+      execute: async ({ content }) => {
+        await writeMemory(await sandbox(), content)
+        return { saved: true }
+      },
+    }),
+  }
+}
 
 // Another member of the group chat, or null if the id isn't one
 type FindOtherMember = (

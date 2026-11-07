@@ -11,11 +11,46 @@ const globalForDaytona = globalThis as unknown as { daytona?: Daytona }
 const daytona = globalForDaytona.daytona ?? new Daytona()
 if (process.env.NODE_ENV !== "production") globalForDaytona.daytona = daytona
 
+// The bot's long-term memory, in its home directory. The sandbox belongs to
+// the bot, not to a chat, so every chat the bot is in sees the same file
+export const MEMORY_FILE = "MEMORY.md"
+
+async function memoryPath(sandbox: Sandbox) {
+  const home = await sandbox.getUserHomeDir()
+  return home ? `${home}/${MEMORY_FILE}` : MEMORY_FILE
+}
+
+// Empty when the file doesn't exist yet
+export async function readMemory(sandbox: Sandbox) {
+  const response = await sandbox.process.executeCommand(
+    `cat "${await memoryPath(sandbox)}" 2>/dev/null || true`
+  )
+  return response.result.trim()
+}
+
+export async function writeMemory(sandbox: Sandbox, content: string) {
+  await sandbox.fs.uploadFile(
+    Buffer.from(content, "utf8"),
+    await memoryPath(sandbox)
+  )
+}
+
 // One sandbox per bot; labels tie it back to the bot in the Daytona dashboard
 export async function createBotSandbox(botId: string, userId: string) {
   const sandbox = await daytona.create({
     labels: { app: "shiftbot", botId, userId },
   })
+  try {
+    await writeMemory(sandbox, "")
+  } catch (error) {
+    // A bot without its memory file isn't set up; don't leave the sandbox behind
+    await daytona
+      .delete(sandbox)
+      .catch((cleanupError) =>
+        console.error("Failed to delete half-set-up sandbox", cleanupError)
+      )
+    throw error
+  }
   return sandbox.id
 }
 
@@ -71,7 +106,9 @@ function once<T>(fn: () => Promise<T>): () => Promise<T> {
 
 // Nothing touches the sandbox until a tool asks for it, so chats that never use
 // it don't wake it up
-export function sandboxAccess(getSandboxId: () => Promise<string>): SandboxAccess {
+export function sandboxAccess(
+  getSandboxId: () => Promise<string>
+): SandboxAccess {
   const sandbox = once(async () => {
     const box = await daytona.get(await getSandboxId())
     // Sandboxes auto-stop when idle; start covers stopped and archived ones
