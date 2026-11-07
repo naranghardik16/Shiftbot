@@ -12,6 +12,8 @@ import { PlusIcon, UsersIcon } from "lucide-react"
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
 import { ChatSearch } from "@/components/chat-search"
+import { GroupChatAvatar } from "@/components/group-chat-avatar"
+import { GroupChatDialog } from "@/components/group-chat-dialog"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -33,11 +35,18 @@ import {
   SidebarRail,
   sidebarMenuButtonVariants,
 } from "@/components/ui/sidebar"
-import type { ChatListItem } from "@/queries/bot"
+import type { BotListItem, ChatListItem } from "@/queries/bot"
 
-export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
-  // The menu unmounts its items on close, so they open the dialog through a handle
+export function AppSidebar({
+  chats,
+  bots,
+}: {
+  chats: ChatListItem[]
+  bots: BotListItem[]
+}) {
+  // The menu unmounts its items on close, so they open the dialogs through handles
   const [botDialog] = useState(() => DialogPrimitive.createHandle())
+  const [groupChatDialog] = useState(() => DialogPrimitive.createHandle())
   const { chatId } = useParams<{ chatId?: string }>()
 
   return (
@@ -61,13 +70,14 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
               <PlusIcon />
               Create new bot
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => groupChatDialog.open(null)}>
               <UsersIcon />
               Create group chat
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <BotDialog handle={botDialog} />
+        <GroupChatDialog bots={bots} handle={groupChatDialog} />
         <ChatSearch chats={chats} />
       </SidebarHeader>
       <SidebarContent>
@@ -85,7 +95,11 @@ export function AppSidebar({ chats }: { chats: ChatListItem[] }) {
                       isActive={chat.id === chatId}
                       render={<Link href={`/chats/${chat.id}`} />}
                     >
-                      <ChatAvatar seed={chat.avatar} />
+                      {chat.kind === "group" ? (
+                        <GroupChatAvatar seeds={chat.avatars} />
+                      ) : (
+                        <ChatAvatar seed={chat.avatars[0]} />
+                      )}
                       <div className="flex min-w-0 flex-1 flex-col">
                         <div className="flex items-baseline gap-2">
                           <span className="truncate font-medium">

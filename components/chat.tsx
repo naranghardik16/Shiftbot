@@ -37,6 +37,11 @@ import {
   PromptInputBody,
   PromptInputFooter,
   type PromptInputMessage,
+  PromptInputSelect,
+  PromptInputSelectContent,
+  PromptInputSelectItem,
+  PromptInputSelectTrigger,
+  PromptInputSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input"
@@ -47,13 +52,20 @@ import {
   ToolHeader,
   ToolOutput,
 } from "@/components/ai-elements/tool"
+import { ChatAvatar } from "@/components/chat-avatar"
 import { Spinner } from "@/components/ui/spinner"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
 type Transport = ReturnType<typeof useTriggerChatTransport<typeof chatAgent>>
-type ToolPart = Extract<ChatUIMessage["parts"][number], { type: `tool-${string}` }>
+type ToolPart = Extract<
+  ChatUIMessage["parts"][number],
+  { type: `tool-${string}` }
+>
 
-export function Chat({ id }: { id: string }) {
+// A member of the chat; direct chats have one, group chats several
+type ChatBot = { id: string; name: string; avatar: string }
+
+export function Chat({ id, bots }: { id: string; bots: ChatBot[] }) {
   const transport = useTriggerChatTransport<typeof chatAgent>({
     task: "chat",
     accessToken: ({ chatId }) => mintChatAccessToken(chatId),
@@ -77,6 +89,7 @@ export function Chat({ id }: { id: string }) {
   return (
     <ChatView
       id={id}
+      bots={bots}
       transport={transport}
       initialMessages={messages as ChatUIMessage[]}
     />
@@ -85,14 +98,19 @@ export function Chat({ id }: { id: string }) {
 
 function ChatView({
   id,
+  bots,
   transport,
   initialMessages,
 }: {
   id: string
+  bots: ChatBot[]
   transport: Transport
   initialMessages: ChatUIMessage[]
 }) {
   const [text, setText] = useState("")
+  // The bot the next message goes to; only group chats offer a choice
+  const [botId, setBotId] = useState(bots[0].id)
+  const isGroup = bots.length > 1
   const { messages, status, sendMessage, stop } = useChat<ChatUIMessage>({
     id,
     transport,
@@ -101,7 +119,8 @@ function ChatView({
 
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
-    sendMessage({ text: message.text })
+    // Per-message metadata reaches the agent as this turn's clientData
+    sendMessage({ text: message.text }, { metadata: { botId } })
     setText("")
   }
 
@@ -114,6 +133,11 @@ function ChatView({
           ) : (
             messages.map((message) => (
               <Message from={message.role} key={message.id}>
+                {isGroup && message.role === "assistant" && (
+                  <BotByline
+                    bot={bots.find((bot) => bot.id === message.metadata?.botId)}
+                  />
+                )}
                 <MessageContent>
                   {message.parts.map((part, i) => {
                     const key = `${message.id}-${i}`
@@ -143,7 +167,30 @@ function ChatView({
               onChange={(e) => setText(e.target.value)}
             />
           </PromptInputBody>
-          <PromptInputFooter className="justify-end">
+          <PromptInputFooter className={isGroup ? undefined : "justify-end"}>
+            {isGroup && (
+              <PromptInputSelect
+                value={botId}
+                onValueChange={(value) =>
+                  typeof value === "string" && setBotId(value)
+                }
+              >
+                <PromptInputSelectTrigger aria-label="Bot to talk to">
+                  <PromptInputSelectValue>
+                    {(value: string) => (
+                      <BotLabel bot={bots.find((bot) => bot.id === value)} />
+                    )}
+                  </PromptInputSelectValue>
+                </PromptInputSelectTrigger>
+                <PromptInputSelectContent>
+                  {bots.map((bot) => (
+                    <PromptInputSelectItem key={bot.id} value={bot.id}>
+                      <BotLabel bot={bot} />
+                    </PromptInputSelectItem>
+                  ))}
+                </PromptInputSelectContent>
+              </PromptInputSelect>
+            )}
             <PromptInputSubmit
               disabled={!text.trim() && status === "ready"}
               status={status}
@@ -152,6 +199,27 @@ function ChatView({
           </PromptInputFooter>
         </PromptInput>
       </div>
+    </div>
+  )
+}
+
+function BotLabel({ bot }: { bot?: ChatBot }) {
+  if (!bot) return null
+  return (
+    <>
+      <ChatAvatar seed={bot.avatar} className="size-4" />
+      {bot.name}
+    </>
+  )
+}
+
+// Who wrote a reply in a group chat; older replies may name a bot that left
+function BotByline({ bot }: { bot?: ChatBot }) {
+  if (!bot) return null
+  return (
+    <div className="flex items-center gap-2 text-sm font-medium">
+      <ChatAvatar seed={bot.avatar} className="size-5" />
+      {bot.name}
     </div>
   )
 }
@@ -173,7 +241,9 @@ function ToolRow({
       {(children || failed) && (
         <ToolContent>
           {children}
-          {failed && <ToolOutput output={undefined} errorText={part.errorText} />}
+          {failed && (
+            <ToolOutput output={undefined} errorText={part.errorText} />
+          )}
         </ToolContent>
       )}
     </Tool>
@@ -193,7 +263,10 @@ function ToolCall({ part }: { part: ToolPart }) {
         : `$ ${command}`
       return (
         <ToolRow part={part} title={`Ran ${truncate(command, 60)}`}>
-          <Terminal output={output} isStreaming={!done && part.state !== "output-error"} />
+          <Terminal
+            output={output}
+            isStreaming={!done && part.state !== "output-error"}
+          />
         </ToolRow>
       )
     }
@@ -252,7 +325,9 @@ function ToolCall({ part }: { part: ToolPart }) {
       const kind = `${double ? "Double-clicked" : "Clicked"}${
         button && button !== "left" ? ` ${button}` : ""
       }`
-      return <ToolRow part={part} title={`${kind} at ${x ?? "…"}, ${y ?? "…"}`} />
+      return (
+        <ToolRow part={part} title={`${kind} at ${x ?? "…"}, ${y ?? "…"}`} />
+      )
     }
 
     case "tool-mouse_move":
@@ -273,7 +348,10 @@ function ToolCall({ part }: { part: ToolPart }) {
 
     case "tool-mouse_scroll":
       return (
-        <ToolRow part={part} title={`Scrolled ${part.input?.direction ?? ""}`} />
+        <ToolRow
+          part={part}
+          title={`Scrolled ${part.input?.direction ?? ""}`}
+        />
       )
 
     case "tool-keyboard_type":

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { SearchIcon } from "lucide-react"
 
 import { ChatAvatar } from "@/components/chat-avatar"
+import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -90,7 +91,14 @@ export function ChatSearch({ chats }: { chats: ChatListItem[] }) {
                       router.push(`/chats/${chat.id}`)
                     }}
                   >
-                    <ChatAvatar seed={chat.avatar} className="size-6" />
+                    {chat.kind === "group" ? (
+                      <GroupChatAvatar
+                        seeds={chat.avatars}
+                        className="size-6"
+                      />
+                    ) : (
+                      <ChatAvatar seed={chat.avatars[0]} className="size-6" />
+                    )}
                     <span className="truncate">{chat.name}</span>
                   </CommandItem>
                 ))}

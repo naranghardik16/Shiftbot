@@ -8,10 +8,18 @@ import {
   type ChatLoadTranscriptParams,
   type ChatStartSessionParams,
 } from "@trigger.dev/sdk/ai"
-import { and, eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
+import { and, eq, inArray } from "drizzle-orm"
+import { z } from "zod"
 
 import { db } from "@/db"
-import { chats } from "@/db/schema"
+import {
+  bots,
+  chatMembers,
+  chats,
+  createGroupChatSchema,
+  type CreateGroupChat,
+} from "@/db/schema"
 import type { chatAgent } from "@/trigger/chat"
 
 const start = chat.createStartSessionAction<typeof chatAgent>("chat")
@@ -50,4 +58,57 @@ export async function mintChatAccessToken(chatId: string) {
 export async function loadChatTranscript(params: ChatLoadTranscriptParams) {
   await assertChatOwner(params.chatId)
   return load(params)
+}
+
+export type CreateGroupChatResult =
+  | { ok: true; chatId: string }
+  | {
+      ok: false
+      error: string
+      fieldErrors?: Partial<Record<keyof CreateGroupChat, string[]>>
+    }
+
+export async function createGroupChat(
+  input: CreateGroupChat
+): Promise<CreateGroupChatResult> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated) {
+    return { ok: false, error: "Sign in to create a group chat." }
+  }
+
+  const parsed = createGroupChatSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Check the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
+    }
+  }
+
+  // Bot ids come from the browser, so keep only the user's own
+  const botIds = [...new Set(parsed.data.botIds)]
+  const owned = await db
+    .select({ id: bots.id })
+    .from(bots)
+    .where(and(inArray(bots.id, botIds), eq(bots.userId, userId)))
+  if (owned.length !== botIds.length) {
+    return { ok: false, error: "Some of those bots no longer exist." }
+  }
+
+  const chatId = await db.transaction(async (tx) => {
+    const [chat] = await tx
+      .insert(chats)
+      .values({ userId, kind: "group", name: parsed.data.name })
+      .returning({ id: chats.id })
+
+    await tx
+      .insert(chatMembers)
+      .values(botIds.map((botId) => ({ chatId: chat.id, botId })))
+
+    return chat.id
+  })
+
+  // The chat list lives in the dashboard layout, so refresh it on every route
+  revalidatePath("/", "layout")
+  return { ok: true, chatId }
 }

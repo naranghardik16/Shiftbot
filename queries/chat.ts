@@ -4,14 +4,17 @@ import { auth } from "@clerk/nextjs/server"
 import { and, asc, eq } from "drizzle-orm"
 
 import { db } from "@/db"
-import { chatMembers, chats, type CreateBot } from "@/db/schema"
+import { chatMembers, chats, type Chat, type CreateBot } from "@/db/schema"
+
+// A member bot, in the shape the bot form edits
+export type ChatBot = CreateBot & { id: string }
 
 export type ChatDetail = {
   id: string
+  kind: Chat["kind"]
   name: string
-  avatar: string
-  // The bot shown in the header, in the shape the bot form edits
-  bot: CreateBot & { id: string }
+  // In join order; direct chats have exactly one
+  bots: ChatBot[]
 }
 
 // One of the signed-in user's chats, or null if it isn't theirs
@@ -21,12 +24,11 @@ export async function getChat(chatId: string): Promise<ChatDetail | null> {
 
   const row = await db.query.chats.findFirst({
     where: and(eq(chats.id, chatId), eq(chats.userId, userId)),
-    columns: { id: true, name: true },
+    columns: { id: true, kind: true, name: true },
     with: {
-      // Direct chats have one bot; group chats show their first member for now
+      // Group members join together, so the bot id breaks the tie
       members: {
-        orderBy: asc(chatMembers.joinedAt),
-        limit: 1,
+        orderBy: [asc(chatMembers.joinedAt), asc(chatMembers.botId)],
         with: {
           bot: {
             columns: {
@@ -42,8 +44,13 @@ export async function getChat(chatId: string): Promise<ChatDetail | null> {
     },
   })
 
-  const bot = row?.members[0]?.bot
-  if (!row || !bot) return null
+  const bots = row?.members.map((member) => member.bot) ?? []
+  if (!row || bots.length === 0) return null
 
-  return { id: row.id, name: row.name ?? bot.name, avatar: bot.avatar, bot }
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name ?? bots[0].name,
+    bots,
+  }
 }
