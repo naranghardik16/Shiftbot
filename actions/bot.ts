@@ -15,7 +15,11 @@ import {
   createBotSchema,
   type CreateBot,
 } from "@/db/schema"
-import { createBotSandbox, deleteBotSandbox } from "@/lib/sandbox"
+import {
+  createBotSandbox,
+  deleteBotSandbox,
+  getSandboxDesktopUrl,
+} from "@/lib/sandbox"
 
 export type CreateBotResult =
   | { ok: true; id: string; chatId: string }
@@ -156,4 +160,27 @@ export async function deleteBot(id: string): Promise<DeleteBotResult> {
 
   revalidatePath("/", "layout")
   redirect("/")
+}
+
+export type GetBotDesktopResult =
+  | { ok: true; url: string }
+  | { ok: false; error: string }
+
+// Wakes the bot's sandbox and desktop if needed and returns a noVNC viewer URL
+export async function getBotDesktop(id: string): Promise<GetBotDesktopResult> {
+  const { isAuthenticated, userId } = await auth()
+  if (!isAuthenticated) return { ok: false, error: "Sign in to view the screen." }
+
+  const bot = await db.query.bots.findFirst({
+    where: and(eq(bots.id, id), eq(bots.userId, userId)),
+    columns: { sandboxId: true },
+  })
+  if (!bot) return { ok: false, error: "Bot not found." }
+
+  try {
+    return { ok: true, url: await getSandboxDesktopUrl(bot.sandboxId) }
+  } catch (error) {
+    console.error("Failed to open sandbox desktop", error)
+    return { ok: false, error: "Couldn't connect to the screen." }
+  }
 }

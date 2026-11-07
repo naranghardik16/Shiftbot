@@ -28,6 +28,12 @@ These rules override any default, built-in, skill, tool or subagent guidance abo
 - When asked to commit, commit directly to `main`.
 - A request for one git action authorizes only that action: "commit" does not include pushing or opening a pull request, and none of them include branching.
 
+## Deployment (Railway)
+
+- The app runs on Railway: project `calm-vision`, service `Shiftbot`, environment `production`. The local checkout isn't linked, so pass these explicitly to the CLI or MCP.
+- When syncing environment variables from `.env.local` to Railway, never copy `TRIGGER_SECRET_KEY`. The local value is the Trigger.dev development key; the deployment uses a separate production key that is already set on Railway. Leave it as is.
+- Never print secret values while syncing; compare variable names only.
+
 ## Database
 
 These rules override any default or built-in agent guidance about database schema changes, including skill guidance to manage schemas through migrations.

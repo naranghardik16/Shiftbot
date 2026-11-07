@@ -30,6 +30,26 @@ export async function deleteBotSandbox(sandboxId: string) {
   }
 }
 
+// noVNC serves the desktop's web viewer on this port
+const NOVNC_PORT = 6080
+const DESKTOP_URL_TTL_SECONDS = 60 * 60
+
+// A browser-openable noVNC viewer for the sandbox's desktop. The signed URL is
+// bound to the noVNC port and expires, so it is safe to hand to the client
+export async function getSandboxDesktopUrl(sandboxId: string) {
+  const box = await sandboxAccess(async () => sandboxId).desktop()
+  const { url } = await box.getSignedPreviewUrl(
+    NOVNC_PORT,
+    DESKTOP_URL_TTL_SECONDS
+  )
+  const viewer = new URL("/vnc.html", url)
+  viewer.searchParams.set("autoconnect", "true")
+  viewer.searchParams.set("reconnect", "true")
+  // Scale the desktop to fit whatever box the viewer is shown in
+  viewer.searchParams.set("resize", "scale")
+  return viewer.toString()
+}
+
 export type SandboxAccess = {
   // The sandbox, started if it had stopped
   sandbox: () => Promise<Sandbox>
