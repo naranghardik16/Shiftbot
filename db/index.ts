@@ -4,9 +4,11 @@ import { Pool } from "pg"
 
 import config from "@/neon"
 import * as schema from "./schema"
+import { assertVerifyFull } from "./ssl"
 
 // Pooled connection for app traffic; migrations use the direct URL (drizzle.config.ts)
 const { postgres } = parseEnv(config, ["DATABASE_URL"])
+assertVerifyFull("DATABASE_URL", postgres.databaseUrl)
 
 // Reuse the pool across dev hot reloads
 const globalForDb = globalThis as unknown as { pool?: Pool }
