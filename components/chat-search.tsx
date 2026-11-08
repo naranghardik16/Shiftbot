@@ -55,7 +55,8 @@ export function ChatSearch({ chats }: { chats: ChatListItem[] }) {
       >
         <SearchIcon data-icon="inline-start" />
         Search
-        <KbdGroup className="ms-auto">
+        {/* Phones and tablets have no shortcut to hint at */}
+        <KbdGroup className="ms-auto pointer-coarse:hidden">
           <Kbd>{isMac ? "⌘" : "Ctrl"}</Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>

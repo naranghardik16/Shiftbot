@@ -4,6 +4,14 @@
 @import "shadcn/tailwind.css";
 @import "@clerk/ui/themes/shadcn.css";
 
+/* Tailwind skips node_modules, so classes used by the markdown renderer
+   (scrolling code blocks and tables, mermaid and table controls) need sources */
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -128,4 +136,15 @@
   html {
     @apply font-sans;
     }
+}
+
+/* iOS zooms into any field under 16px when it gets focus. Unlayered, so it
+   wins over the md:text-sm utilities (landscape phones are past md) and over
+   Clerk's own inputs */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }

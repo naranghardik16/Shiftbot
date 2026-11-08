@@ -9,6 +9,7 @@ import {
 import Link from "next/link"
 import type { ReactNode } from "react"
 
+import { MobileHeader } from "@/components/mobile-header"
 import { ResetCountdown } from "@/components/reset-countdown"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,7 +76,8 @@ export default async function Page() {
 
   if (!allowance) {
     return (
-      <div className="flex min-h-svh flex-col">
+      <div className="flex min-h-dvh flex-col">
+        <MobileHeader />
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -99,56 +101,59 @@ export default async function Page() {
   const { limits } = period
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-6 py-16">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
-        <p className="text-muted-foreground">
-          What you&apos;ve used of your Pro allowance this billing period.
+    <div className="flex min-h-dvh flex-col">
+      <MobileHeader />
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))] md:px-6 md:py-16">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
+          <p className="text-muted-foreground">
+            What you&apos;ve used of your Pro allowance this billing period.
+          </p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Resets in <ResetCountdown resetsAt={period.end.toISOString()} />
+            </CardTitle>
+            <CardDescription>
+              Current period: {format(period.start, "MMM d")} –{" "}
+              {format(period.end, "MMM d, yyyy")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            <Meter
+              icon={<SparklesIcon />}
+              label="AI usage"
+              used={usage.ai.costMicros}
+              limit={limits.aiMicros}
+              detail={`${percent(usage.ai.costMicros, limits.aiMicros)}% · ${compact.format(usage.ai.quantity)} tokens`}
+            />
+            <Meter
+              icon={<TerminalSquareIcon />}
+              label="Sandbox time"
+              used={usage.sandbox.quantity}
+              limit={limits.sandboxSeconds}
+              detail={`${hours(usage.sandbox.quantity)} of ${hours(limits.sandboxSeconds)}`}
+            />
+            <Meter
+              icon={<BotIcon />}
+              label="Bots"
+              used={bots}
+              limit={limits.bots}
+              detail={`${bots} of ${limits.bots}`}
+            />
+          </CardContent>
+        </Card>
+
+        <p className="text-sm text-muted-foreground">
+          AI usage counts every message your bots read and write. Sandbox time
+          counts while a bot&apos;s computer is running, including the few idle
+          minutes before it switches itself off. When AI usage runs out, bots
+          stop replying until the period resets; when sandbox time runs out,
+          their computers switch off but they can still chat.
         </p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Resets in <ResetCountdown resetsAt={period.end.toISOString()} />
-          </CardTitle>
-          <CardDescription>
-            Current period: {format(period.start, "MMM d")} –{" "}
-            {format(period.end, "MMM d, yyyy")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <Meter
-            icon={<SparklesIcon />}
-            label="AI usage"
-            used={usage.ai.costMicros}
-            limit={limits.aiMicros}
-            detail={`${percent(usage.ai.costMicros, limits.aiMicros)}% · ${compact.format(usage.ai.quantity)} tokens`}
-          />
-          <Meter
-            icon={<TerminalSquareIcon />}
-            label="Sandbox time"
-            used={usage.sandbox.quantity}
-            limit={limits.sandboxSeconds}
-            detail={`${hours(usage.sandbox.quantity)} of ${hours(limits.sandboxSeconds)}`}
-          />
-          <Meter
-            icon={<BotIcon />}
-            label="Bots"
-            used={bots}
-            limit={limits.bots}
-            detail={`${bots} of ${limits.bots}`}
-          />
-        </CardContent>
-      </Card>
-
-      <p className="text-sm text-muted-foreground">
-        AI usage counts every message your bots read and write. Sandbox time
-        counts while a bot&apos;s computer is running, including the few idle
-        minutes before it switches itself off. When AI usage runs out, bots stop
-        replying until the period resets; when sandbox time runs out, their
-        computers switch off but they can still chat.
-      </p>
     </div>
   )
 }

@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { UserButton } from "@clerk/nextjs"
 import { cn } from "cn"
 import { formatDistanceToNowStrict } from "date-fns"
-import { GaugeIcon, PlusIcon, UsersIcon } from "lucide-react"
+import { GaugeIcon, MoonIcon, PlusIcon, SunIcon, UsersIcon } from "lucide-react"
+import { useTheme } from "next-themes"
 
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
@@ -34,6 +35,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   sidebarMenuButtonVariants,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { USAGE_PATH } from "@/lib/billing"
 import type { BotListItem, ChatListItem } from "@/queries/bot"
@@ -49,6 +51,16 @@ export function AppSidebar({
   const [botDialog] = useState(() => DialogPrimitive.createHandle())
   const [groupChatDialog] = useState(() => DialogPrimitive.createHandle())
   const { chatId } = useParams<{ chatId?: string }>()
+  const { setOpenMobile } = useSidebar()
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme === "dark"
+
+  // On phones the sidebar is a sheet over the page: close it once a chat,
+  // search result or new group chat has been opened
+  const pathname = usePathname()
+  useEffect(() => {
+    setOpenMobile(false)
+  }, [pathname, setOpenMobile])
 
   return (
     <Sidebar collapsible="icon">
@@ -95,6 +107,8 @@ export function AppSidebar({
                       tooltip={chat.name}
                       isActive={chat.id === chatId}
                       render={<Link href={`/chats/${chat.id}`} />}
+                      // The current chat doesn't change the path
+                      onClick={() => setOpenMobile(false)}
                     >
                       {chat.kind === "group" ? (
                         <GroupChatAvatar seeds={chat.avatars} />
@@ -155,6 +169,18 @@ export function AppSidebar({
                   label="Usage"
                   labelIcon={<GaugeIcon className="size-4" />}
                   href={USAGE_PATH}
+                />
+                {/* Also on the D key, which phones don't have */}
+                <UserButton.Action
+                  label={isDark ? "Light mode" : "Dark mode"}
+                  labelIcon={
+                    isDark ? (
+                      <SunIcon className="size-4" />
+                    ) : (
+                      <MoonIcon className="size-4" />
+                    )
+                  }
+                  onClick={() => setTheme(isDark ? "light" : "dark")}
                 />
               </UserButton.MenuItems>
             </UserButton>

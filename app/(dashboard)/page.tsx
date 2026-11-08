@@ -3,6 +3,7 @@ import { PlusIcon } from "lucide-react"
 
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
+import { MobileHeader } from "@/components/mobile-header"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -18,7 +19,8 @@ export default async function Page() {
   const seed = crypto.randomUUID()
 
   return (
-    <div className="flex min-h-svh flex-col">
+    <div className="flex min-h-dvh flex-col">
+      <MobileHeader />
       <Empty>
         <EmptyHeader>
           <EmptyMedia>

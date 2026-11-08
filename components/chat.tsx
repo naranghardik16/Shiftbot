@@ -23,6 +23,7 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation"
+import { useStickToBottomContext } from "use-stick-to-bottom"
 import {
   FileTree,
   FileTreeFile,
@@ -213,7 +214,8 @@ function ChatView({
               })
 
               const content = (
-                <MessageContent>
+                // Long words like URLs and paths wrap instead of being cut off
+                <MessageContent className="wrap-break-word">
                   {recipient ? (
                     // A block wrapper, since floats don't flow in the flex
                     // column: the tag sits on the text's first line, like a
@@ -268,12 +270,18 @@ function ChatView({
           )}
         </ConversationContent>
         <ConversationScrollButton />
+        <StayAtBottomOnResize />
       </Conversation>
 
-      <div className="mx-auto w-full max-w-3xl p-4 pt-0">
+      {/* Clear of the home indicator on phones */}
+      <div className="mx-auto w-full max-w-3xl px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <PromptInput onSubmit={handleSubmit}>
           <PromptInputBody>
             <PromptInputTextarea
+              // A long draft scrolls inside the box rather than pushing the
+              // send button off a short screen, like a landscape phone with
+              // the keyboard open
+              className="max-h-[min(12rem,30dvh)]"
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
@@ -312,6 +320,32 @@ function ChatView({
       </div>
     </div>
   )
+}
+
+// The list only follows its content's size, so when the on-screen keyboard
+// opens or the phone rotates, the shorter view would leave the latest message
+// hidden. Keep it in view if it was before the resize
+function StayAtBottomOnResize() {
+  const { scrollRef, isAtBottom, scrollToBottom } = useStickToBottomContext()
+  const wasAtBottom = useRef(isAtBottom)
+  useEffect(() => {
+    wasAtBottom.current = isAtBottom
+  }, [isAtBottom])
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    let height = scroller.clientHeight
+    const observer = new ResizeObserver(() => {
+      const shrank = scroller.clientHeight < height
+      height = scroller.clientHeight
+      if (shrank && wasAtBottom.current) scrollToBottom("instant")
+    })
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [scrollRef, scrollToBottom])
+
+  return null
 }
 
 function BotLabel({ bot }: { bot?: ChatBot }) {

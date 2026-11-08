@@ -5,8 +5,13 @@ import { EditGroupChatDialog } from "@/components/edit-group-chat-dialog"
 import { GroupChatAvatar } from "@/components/group-chat-avatar"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import type { BotListItem } from "@/queries/bot"
 import type { ChatDetail } from "@/queries/chat"
+
+// Below the status bar when the page draws under it
+const headerClassName =
+  "box-content flex h-12 shrink-0 items-center gap-2 px-4 pt-[env(safe-area-inset-top)]"
 
 export function ChatHeader({
   chat,
@@ -19,8 +24,9 @@ export function ChatHeader({
   // Group chats edit the group, not a bot, and have no desktop to show
   if (chat.kind === "group") {
     return (
-      <header className="flex h-12 shrink-0 items-center gap-2 px-4">
-        <h1 className="-ms-2.5 min-w-0">
+      <header className={headerClassName}>
+        <SidebarTrigger className="-ms-1.5 md:hidden" />
+        <h1 className="min-w-0 md:-ms-2.5">
           <EditGroupChatDialog
             chat={{
               id: chat.id,
@@ -50,8 +56,9 @@ export function ChatHeader({
 
   const [bot] = chat.bots
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 px-4">
-      <h1 className="-ms-2.5 min-w-0">
+    <header className={headerClassName}>
+      <SidebarTrigger className="-ms-1.5 md:hidden" />
+      <h1 className="min-w-0 md:-ms-2.5">
         <EditBotDialog
           bot={bot}
           trigger={

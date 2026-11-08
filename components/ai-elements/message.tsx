@@ -29,6 +29,9 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
+// The math plugin renders with KaTeX, which needs its stylesheet to hide the
+// accessible copy and lay out fractions and roots
+import "katex/dist/katex.min.css";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];

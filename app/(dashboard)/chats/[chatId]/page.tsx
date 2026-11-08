@@ -21,7 +21,7 @@ export default async function Page(props: PageProps<"/chats/[chatId]">) {
   // Group chats have no single bot whose desktop to show
   if (chat.kind === "group") {
     return (
-      <div className="flex h-svh flex-col">
+      <div className="flex h-dvh flex-col">
         <ChatHeader chat={chat} bots={allBots} />
         <Chat key={chat.id} id={chat.id} bots={bots} />
       </div>
@@ -33,7 +33,7 @@ export default async function Page(props: PageProps<"/chats/[chatId]">) {
     <DesktopPanelProvider key={bot.id} botId={bot.id}>
       {/* The group sets an inline height of 100%, so the parent fixes it to the
           viewport; only the chat messages scroll */}
-      <div className="h-svh">
+      <div className="h-dvh">
         <ResizablePanelGroup orientation="horizontal">
           <ResizablePanel id="chat" minSize="30%">
             <div className="flex h-full flex-col">
@@ -41,7 +41,8 @@ export default async function Page(props: PageProps<"/chats/[chatId]">) {
               <Chat key={chat.id} id={chat.id} bots={bots} />
             </div>
           </ResizablePanel>
-          <ResizableHandle />
+          {/* Phones show the screen in a sheet instead of a split */}
+          <ResizableHandle className="max-md:hidden pointer-coarse:after:w-6" />
           <DesktopPanel botName={bot.name} />
         </ResizablePanelGroup>
       </div>
