@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm"
 import {
+  bigint,
   index,
   pgEnum,
   pgTable,
@@ -133,3 +134,42 @@ export const chatMembersRelations = relations(chatMembers, ({ one }) => ({
   chat: one(chats, { fields: [chatMembers.chatId], references: [chats.id] }),
   bot: one(bots, { fields: [chatMembers.botId], references: [bots.id] }),
 }))
+
+// What a usage event is measured against
+export const usageMeter = pgEnum("usage_meter", ["ai", "sandbox"])
+
+// The usage ledger: one append-only row per billable thing that happened. A
+// user's usage in a billing period is the sum of their rows created in it
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    // Clerk user ID
+    userId: text("user_id").notNull(),
+    meter: usageMeter("meter").notNull(),
+    // Unique per event, so a retried write can't count twice
+    key: text("key").notNull().unique(),
+    // ai: tokens; sandbox: seconds the sandbox was running
+    quantity: bigint("quantity", { mode: "number" }).notNull(),
+    // What the event cost us, in millionths of a dollar
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    // Not a foreign key: usage stays on the books after the bot is deleted
+    botId: text("bot_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("usage_events_user_meter_created_idx").on(
+      table.userId,
+      table.meter,
+      table.createdAt
+    ),
+  ]
+)
+
+export type UsageEvent = typeof usageEvents.$inferSelect
+export type NewUsageEvent = typeof usageEvents.$inferInsert
+export type UsageMeter = (typeof usageMeter.enumValues)[number]

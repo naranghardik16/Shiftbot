@@ -54,6 +54,28 @@ export async function createBotSandbox(botId: string, userId: string) {
   return sandbox.id
 }
 
+// States Daytona bills CPU and memory for; a stopped sandbox pays for disk only
+const RUNNING_STATES = [
+  SandboxState.CREATING,
+  SandboxState.STARTING,
+  SandboxState.STARTED,
+  SandboxState.STOPPING,
+  SandboxState.RESTORING,
+  SandboxState.RESIZING,
+]
+
+// Every bot sandbox that is running right now, across all users
+export async function listRunningSandboxes() {
+  const running: Sandbox[] = []
+  for await (const sandbox of daytona.list({
+    labels: { app: "shiftbot" },
+    states: RUNNING_STATES,
+  })) {
+    running.push(sandbox)
+  }
+  return running
+}
+
 export async function deleteBotSandbox(sandboxId: string) {
   try {
     const sandbox = await daytona.get(sandboxId)

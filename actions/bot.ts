@@ -18,14 +18,17 @@ import {
 import {
   BOT_FEATURES,
   hasFeatures,
+  limitReached,
   SANDBOX_FEATURES,
   upgradeRequired,
+  type BillingBlock,
 } from "@/lib/billing"
 import {
   createBotSandbox,
   deleteBotSandbox,
   getSandboxDesktopUrl,
 } from "@/lib/sandbox"
+import { getAllowance } from "@/lib/usage"
 
 export type CreateBotResult =
   | { ok: true; id: string; chatId: string }
@@ -33,7 +36,7 @@ export type CreateBotResult =
       ok: false
       error: string
       fieldErrors?: Partial<Record<keyof CreateBot, string[]>>
-      upgradeRequired?: true
+      billing?: BillingBlock
     }
 
 export async function createBot(input: CreateBot): Promise<CreateBotResult> {
@@ -43,6 +46,17 @@ export async function createBot(input: CreateBot): Promise<CreateBotResult> {
   // Bots and their sandboxes cost money, so only paid plans can make them
   if (!hasFeatures(has, BOT_FEATURES)) {
     return upgradeRequired("Creating bots is part of the Pro plan.")
+  }
+  // A new bot's sandbox starts running at once, so it needs time left too
+  const allowance = await getAllowance(userId)
+  if (!allowance) return upgradeRequired("Creating bots is part of the Pro plan.")
+  if (allowance.remaining.bots === 0) {
+    return limitReached(
+      `Your plan allows ${allowance.period.limits.bots} bots. Delete one to make room.`
+    )
+  }
+  if (allowance.remaining.sandboxSeconds === 0) {
+    return limitReached("You've used this period's sandbox time.")
   }
 
   const parsed = createBotSchema.safeParse(input)
@@ -175,7 +189,7 @@ export async function deleteBot(id: string): Promise<DeleteBotResult> {
 
 export type GetBotDesktopResult =
   | { ok: true; url: string }
-  | { ok: false; error: string; upgradeRequired?: true }
+  | { ok: false; error: string; billing?: BillingBlock }
 
 // Wakes the bot's sandbox and desktop if needed and returns a noVNC viewer URL
 export async function getBotDesktop(id: string): Promise<GetBotDesktopResult> {
@@ -184,6 +198,11 @@ export async function getBotDesktop(id: string): Promise<GetBotDesktopResult> {
   // Connecting wakes the sandbox, which only paid plans can use
   if (!hasFeatures(has, SANDBOX_FEATURES)) {
     return upgradeRequired("Bot screens are part of the Pro plan.")
+  }
+  const allowance = await getAllowance(userId)
+  if (!allowance) return upgradeRequired("Bot screens are part of the Pro plan.")
+  if (allowance.remaining.sandboxSeconds === 0) {
+    return limitReached("You've used this period's sandbox time.")
   }
 
   const bot = await db.query.bots.findFirst({

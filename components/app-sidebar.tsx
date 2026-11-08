@@ -7,7 +7,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { UserButton } from "@clerk/nextjs"
 import { cn } from "cn"
 import { formatDistanceToNowStrict } from "date-fns"
-import { PlusIcon, UsersIcon } from "lucide-react"
+import { GaugeIcon, PlusIcon, UsersIcon } from "lucide-react"
 
 import { BotDialog } from "@/components/bot-dialog"
 import { ChatAvatar } from "@/components/chat-avatar"
@@ -35,6 +35,7 @@ import {
   SidebarRail,
   sidebarMenuButtonVariants,
 } from "@/components/ui/sidebar"
+import { USAGE_PATH } from "@/lib/billing"
 import type { BotListItem, ChatListItem } from "@/queries/bot"
 
 export function AppSidebar({
@@ -148,7 +149,15 @@ export function AppSidebar({
                     "truncate ps-0 text-sm font-medium text-inherit group-data-[collapsible=icon]:hidden",
                 },
               }}
-            />
+            >
+              <UserButton.MenuItems>
+                <UserButton.Link
+                  label="Usage"
+                  labelIcon={<GaugeIcon className="size-4" />}
+                  href={USAGE_PATH}
+                />
+              </UserButton.MenuItems>
+            </UserButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

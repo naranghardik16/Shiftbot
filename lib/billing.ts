@@ -14,9 +14,49 @@ export function hasFeatures(has: Has | undefined, features: BillableFeature[]) {
 }
 
 export const PRICING_PATH = "/pricing"
+export const USAGE_PATH = "/usage"
 
-// Failure shape for actions a free user can't take; the client shows the
-// upgrade toast when it sees upgradeRequired
-export function upgradeRequired(error: string) {
-  return { ok: false as const, error, upgradeRequired: true as const }
+// Why an action was refused: the free plan doesn't include it, or the paid
+// plan's allowance for this period is used up
+export type BillingBlock = "upgrade" | "limit"
+
+// Failure shape for billing refusals; the client shows the matching toast
+export type BillingFailure = {
+  ok: false
+  error: string
+  billing: BillingBlock
+}
+
+export function upgradeRequired(error: string): BillingFailure {
+  return { ok: false, error, billing: "upgrade" }
+}
+
+export function limitReached(error: string): BillingFailure {
+  return { ok: false, error, billing: "limit" }
+}
+
+// The agent's turn errors reach the browser as plain text, so billing
+// refusals carry a prefix the browser can recognize
+const ERROR_PREFIX: Record<BillingBlock, string> = {
+  upgrade: "UPGRADE_REQUIRED: ",
+  limit: "USAGE_LIMIT: ",
+}
+
+export function billingErrorText(billing: BillingBlock, error: string) {
+  return `${ERROR_PREFIX[billing]}${error}`
+}
+
+// The block and the readable message, or null for any other error
+export function parseBillingError(
+  text: string
+): { billing: BillingBlock; error: string } | null {
+  for (const [billing, prefix] of Object.entries(ERROR_PREFIX)) {
+    if (text.startsWith(prefix)) {
+      return {
+        billing: billing as BillingBlock,
+        error: text.slice(prefix.length),
+      }
+    }
+  }
+  return null
 }

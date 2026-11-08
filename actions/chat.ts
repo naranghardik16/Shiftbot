@@ -21,7 +21,15 @@ import {
   createGroupChatSchema,
   type CreateGroupChat,
 } from "@/db/schema"
-import { BOT_FEATURES, hasFeatures } from "@/lib/billing"
+import {
+  billingErrorText,
+  BOT_FEATURES,
+  hasFeatures,
+  limitReached,
+  upgradeRequired,
+  type BillingFailure,
+} from "@/lib/billing"
+import { getAllowance } from "@/lib/usage"
 import type { chatAgent } from "@/trigger/chat"
 
 const start = chat.createStartSessionAction<typeof chatAgent>("chat")
@@ -39,14 +47,35 @@ async function assertChatOwner(chatId: string) {
   if (!row) throw new Error("Chat not found")
 }
 
-// Talking to a bot runs the model and its sandbox, so only paid plans get a
-// session token. The browser checks the plan first and shows the upgrade
-// toast; this is the enforcement behind it
-async function assertCanChat() {
-  const { has } = await auth()
+// Talking to a bot runs the model, so it needs a paid plan with AI allowance
+// left this period
+async function chatBlock(): Promise<BillingFailure | null> {
+  const { isAuthenticated, userId, has } = await auth()
+  if (!isAuthenticated) throw new Error("Unauthorized")
   if (!hasFeatures(has, BOT_FEATURES)) {
-    throw new Error("Chatting with bots is part of the Pro plan.")
+    return upgradeRequired("Chatting with bots is part of the Pro plan.")
   }
+  const allowance = await getAllowance(userId)
+  if (!allowance) {
+    return upgradeRequired("Chatting with bots is part of the Pro plan.")
+  }
+  if (allowance.remaining.aiMicros === 0) {
+    return limitReached("You've used this period's AI allowance.")
+  }
+  return null
+}
+
+// The browser asks before each message so it can show the right toast
+export async function checkChatAllowance(): Promise<
+  { ok: true } | BillingFailure
+> {
+  return (await chatBlock()) ?? { ok: true }
+}
+
+// Session tokens go only to users who may chat; the agent re-checks every turn
+async function assertCanChat() {
+  const block = await chatBlock()
+  if (block) throw new Error(billingErrorText(block.billing, block.error))
 }
 
 // Creates the session and its first run; idempotent per chat id

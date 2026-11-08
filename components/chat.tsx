@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react"
 import type { BundledLanguage } from "shiki"
 
 import {
+  checkChatAllowance,
   loadChatTranscript,
   mintChatAccessToken,
   startChatSession,
@@ -56,8 +57,8 @@ import {
 import { ChatAvatar } from "@/components/chat-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
-import { useUpgradeToast } from "@/hooks/use-upgrade-toast"
-import { BOT_FEATURES, hasFeatures } from "@/lib/billing"
+import { useBillingToast } from "@/hooks/use-billing-toast"
+import { BOT_FEATURES, hasFeatures, parseBillingError } from "@/lib/billing"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
 type Transport = ReturnType<typeof useTriggerChatTransport<typeof chatAgent>>
@@ -117,16 +118,27 @@ function ChatView({
   // The picked bot may have been removed from the group since
   const botId = bots.some((bot) => bot.id === pickedId) ? pickedId : bots[0].id
   const isGroup = bots.length > 1
-  const { messages, status, sendMessage, stop } = useChat<ChatUIMessage>({
-    id,
-    transport,
-    messages: initialMessages,
-  })
+  const { messages, status, error, sendMessage, stop } = useChat<ChatUIMessage>(
+    {
+      id,
+      transport,
+      messages: initialMessages,
+    }
+  )
   // The server refuses a session to free plans; checking here first lets the
   // person see why instead of a failed send
   const { has } = useAuth()
   const canChat = hasFeatures(has, BOT_FEATURES)
-  const showUpgradeToast = useUpgradeToast()
+  const showBillingToast = useBillingToast()
+  // While the allowance check for a new message is in flight
+  const [checking, setChecking] = useState(false)
+
+  // The agent refuses a turn when the allowance has run out in the meantime,
+  // for example during a handoff or in another tab
+  useEffect(() => {
+    const block = error && parseBillingError(error.message)
+    if (block) showBillingToast(block.billing, block.error)
+  }, [error, showBillingToast])
 
   // When a reply ends in a handoff, ask the chosen bot to answer the same
   // message. Also picks up a handoff left pending by a closed tab
@@ -148,10 +160,20 @@ function ChatView({
     })
   }, [status, messages, sendMessage, canChat])
 
-  function handleSubmit(message: PromptInputMessage) {
-    if (!message.text.trim()) return
+  async function handleSubmit(message: PromptInputMessage) {
+    if (!message.text.trim() || checking) return
     if (!canChat) {
-      showUpgradeToast("Chatting with bots is part of the Pro plan.")
+      showBillingToast("upgrade", "Chatting with bots is part of the Pro plan.")
+      return
+    }
+    // Ask first, so a used-up allowance shows a toast and keeps the draft,
+    // rather than leaving the message unanswered in the chat
+    setChecking(true)
+    const allowance = await checkChatAllowance().finally(() =>
+      setChecking(false)
+    )
+    if (!allowance.ok) {
+      showBillingToast(allowance.billing, allowance.error)
       return
     }
     // The request metadata reaches the agent as this turn's clientData; the
@@ -281,7 +303,7 @@ function ChatView({
               </PromptInputSelect>
             )}
             <PromptInputSubmit
-              disabled={!text.trim() && status === "ready"}
+              disabled={(!text.trim() && status === "ready") || checking}
               status={status}
               onStop={stop}
             />

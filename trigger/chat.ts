@@ -4,6 +4,7 @@ import {
   hasToolCall,
   isStepCount,
   type InferUITools,
+  type StopCondition,
   type UIDataTypes,
   type UIMessage,
 } from "ai"
@@ -12,7 +13,14 @@ import { z } from "zod"
 
 import { db } from "@/db"
 import { bots, chatMembers, chats, type Bot } from "@/db/schema"
+import { billingErrorText } from "@/lib/billing"
 import { readMemory, sandboxAccess } from "@/lib/sandbox"
+import {
+  getAllowance,
+  modelCostMicros,
+  modelTokens,
+  recordUsage,
+} from "@/lib/usage"
 import {
   createComputerTools,
   createHandoffTool,
@@ -33,6 +41,8 @@ const actionSchema = z.object({ type: z.literal("handoff") })
 type Member = Pick<Bot, "id" | "name" | "job" | "instructions" | "sandboxId">
 
 type Turn = {
+  // Clerk ID of the person who owns the chat, and pays for it
+  userId: string
   // The bot answering this turn
   bot: Member
   // Group chats only: the chat's name and the other members
@@ -51,6 +61,7 @@ async function loadTurn(chatId: string, botId?: string): Promise<Turn> {
       sandboxId: bots.sandboxId,
       kind: chats.kind,
       chatName: chats.name,
+      userId: chats.userId,
     })
     .from(chatMembers)
     .innerJoin(bots, eq(bots.id, chatMembers.botId))
@@ -70,8 +81,9 @@ async function loadTurn(chatId: string, botId?: string): Promise<Turn> {
   const bot = botId ? members.find((member) => member.id === botId) : members[0]
   if (!bot) throw new Error(`Bot ${botId ?? "(any)"} is not in chat ${chatId}`)
 
-  const [{ kind, chatName }] = rows
+  const [{ kind, chatName, userId }] = rows
   return {
+    userId,
     bot,
     group:
       kind === "group"
@@ -149,7 +161,8 @@ function memoryPrompt(memory: string | null, inGroup: boolean) {
 function systemPrompt(
   { bot, group }: Turn,
   handedOff: boolean,
-  memory: string | null
+  memory: string | null,
+  computerAvailable: boolean
 ) {
   const { name, job, instructions } = bot
   return [
@@ -161,6 +174,9 @@ function systemPrompt(
     group ? groupPrompt(group, handedOff) : null,
     `You have your own computer: a private, isolated Linux sandbox hosted on Daytona, created for you when you were created and deleted along with you. It has its own filesystem, network and processes, and nobody else's work runs in it. It also has a desktop you can see and operate with the mouse and keyboard.`,
     `Use your computer when the job calls for it. Prefer the shell and file tools when they can do the work, and the desktop when something needs a graphical app. Look at the screen before you click or type, and again afterwards to check the result, since screen coordinates are only valid for what is currently shown. Your screenshots are private to you; show the screen only when the person asks to see it.`,
+    computerAvailable
+      ? null
+      : `Your computer is switched off right now: the person has used this billing period's sandbox time, so you have no computer tools and can't save to your memory this turn. If the request needs your computer, say so plainly and suggest they check their usage page. Otherwise answer as well as you can without it.`,
     memoryPrompt(memory, group !== null),
     `Speak as ${name}, in the first person. Don't describe yourself as a generic AI assistant.`,
   ]
@@ -215,26 +231,69 @@ export const chatAgent = chat
       const handedOff = trigger === "action-turn"
       const canHandOff = turn.group !== null && !handedOff
 
-      const memory = await loadMemory(turn.bot)
-      chat.prompt.set(systemPrompt(turn, handedOff, memory))
+      // Every turn is paid for: the model needs AI allowance left, and the
+      // computer needs sandbox time left
+      const allowance = await getAllowance(turn.userId)
+      if (!allowance) {
+        throw new Error(
+          billingErrorText(
+            "upgrade",
+            "Chatting with bots is part of the Pro plan."
+          )
+        )
+      }
+      const aiLeft = allowance.remaining.aiMicros
+      if (aiLeft === 0) {
+        throw new Error(
+          billingErrorText("limit", "You've used this period's AI allowance.")
+        )
+      }
+      const computerAvailable = allowance.remaining.sandboxSeconds > 0
+
+      // Reading memory wakes the sandbox, so skip it when there's no time left
+      const memory = computerAvailable ? await loadMemory(turn.bot) : null
+      chat.prompt.set(systemPrompt(turn, handedOff, memory, computerAvailable))
       chat.setUIMessageStreamOptions({
         messageMetadata: ({ part }) =>
           part.type === "start" ? { botId: turn.bot.id } : undefined,
       })
 
+      // Handoff is the only tool that doesn't use the sandbox
+      const toolNames = (Object.keys(tools) as (keyof typeof tools)[]).filter(
+        (name) => (name === "handoff" ? canHandOff : computerAvailable)
+      )
+
+      // Stop working once this turn has spent what's left of the allowance,
+      // so one long turn can't run far past it
+      const allowanceSpent: StopCondition<typeof tools> = ({ steps }) =>
+        steps.reduce((sum, step) => sum + modelCostMicros(step.usage), 0) >=
+        aiLeft
+
       return streamText({
         model: anthropic("claude-sonnet-5-5"),
         messages,
         tools,
-        activeTools: canHandOff
-          ? undefined
-          : (Object.keys(tools).filter(
-              (name) => name !== "handoff"
-            ) as (keyof typeof tools)[]),
+        activeTools: toolNames,
         abortSignal: signal,
         // Let the bot work through several tool calls before it replies; a
         // handoff ends its turn
-        stopWhen: [isStepCount(50), hasToolCall("handoff")],
+        stopWhen: [isStepCount(50), hasToolCall("handoff"), allowanceSpent],
+        // Each model call goes on the ledger as soon as it finishes. Its
+        // response id is unique, so a retried write isn't counted twice
+        onStepFinish: async (step) => {
+          try {
+            await recordUsage({
+              userId: turn.userId,
+              meter: "ai",
+              key: `ai:${step.response.id}`,
+              quantity: modelTokens(step.usage),
+              costMicros: modelCostMicros(step.usage),
+              botId: turn.bot.id,
+            })
+          } catch (error) {
+            console.error("Failed to record AI usage", error)
+          }
+        },
       })
     },
   })
