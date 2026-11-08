@@ -28,6 +28,7 @@ import {
 import { ResizablePanel } from "@/components/ui/resizable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { useUpgradeToast } from "@/hooks/use-upgrade-toast"
 
 // Daytona desktops run at 1024x768 unless the sandbox sets VNC_RESOLUTION
 const DESKTOP_RATIO = 4 / 3
@@ -78,6 +79,7 @@ export function DesktopPanelProvider({
   const [connecting, startConnecting] = useTransition()
   const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null)
   const [dialogSlot, setDialogSlot] = useState<HTMLElement | null>(null)
+  const showUpgradeToast = useUpgradeToast()
 
   // Fetches a fresh viewer URL, which also wakes a stopped sandbox. A new URL
   // reloads the viewer, so this doubles as reconnect
@@ -87,13 +89,14 @@ export function DesktopPanelProvider({
         current.status === "ready" ? current : { status: "loading" }
       )
       const result = await getBotDesktop(botId)
+      if (!result.ok && result.upgradeRequired) showUpgradeToast(result.error)
       setDesktop(
         result.ok
           ? { status: "ready", url: result.url }
           : { status: "error", error: result.error }
       )
     })
-  }, [botId])
+  }, [botId, showUpgradeToast])
 
   // Connect the first time the panel opens, so chats that never look at the
   // screen don't wake the sandbox

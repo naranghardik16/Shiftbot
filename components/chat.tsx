@@ -1,6 +1,7 @@
 "use client"
 
 import { useChat } from "@ai-sdk/react"
+import { useAuth } from "@clerk/nextjs"
 import {
   useLoadTranscript,
   useTriggerChatTransport,
@@ -55,6 +56,8 @@ import {
 import { ChatAvatar } from "@/components/chat-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
+import { useUpgradeToast } from "@/hooks/use-upgrade-toast"
+import { BOT_FEATURES, hasFeatures } from "@/lib/billing"
 import type { ChatUIMessage, chatAgent } from "@/trigger/chat"
 
 type Transport = ReturnType<typeof useTriggerChatTransport<typeof chatAgent>>
@@ -119,6 +122,11 @@ function ChatView({
     transport,
     messages: initialMessages,
   })
+  // The server refuses a session to free plans; checking here first lets the
+  // person see why instead of a failed send
+  const { has } = useAuth()
+  const canChat = hasFeatures(has, BOT_FEATURES)
+  const showUpgradeToast = useUpgradeToast()
 
   // When a reply ends in a handoff, ask the chosen bot to answer the same
   // message. Also picks up a handoff left pending by a closed tab
@@ -129,6 +137,8 @@ function ChatView({
     if (last?.role !== "assistant" || handedOff.current.has(last.id)) return
     const handoff = last.parts.findLast((part) => part.type === "tool-handoff")
     if (handoff?.state !== "output-available") return
+    // Left for later, so the handoff goes through once the plan allows it
+    if (!canChat) return
 
     handedOff.current.add(last.id)
     // The action's metadata reaches the agent as that turn's clientData
@@ -136,10 +146,14 @@ function ChatView({
       body: { action: { type: "handoff" } },
       metadata: { botId: handoff.output.botId },
     })
-  }, [status, messages, sendMessage])
+  }, [status, messages, sendMessage, canChat])
 
   function handleSubmit(message: PromptInputMessage) {
     if (!message.text.trim()) return
+    if (!canChat) {
+      showUpgradeToast("Chatting with bots is part of the Pro plan.")
+      return
+    }
     // The request metadata reaches the agent as this turn's clientData; the
     // message's own metadata is saved with it, so it can show who it was for
     sendMessage(

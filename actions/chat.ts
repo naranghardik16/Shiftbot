@@ -21,6 +21,7 @@ import {
   createGroupChatSchema,
   type CreateGroupChat,
 } from "@/db/schema"
+import { BOT_FEATURES, hasFeatures } from "@/lib/billing"
 import type { chatAgent } from "@/trigger/chat"
 
 const start = chat.createStartSessionAction<typeof chatAgent>("chat")
@@ -38,17 +39,30 @@ async function assertChatOwner(chatId: string) {
   if (!row) throw new Error("Chat not found")
 }
 
+// Talking to a bot runs the model and its sandbox, so only paid plans get a
+// session token. The browser checks the plan first and shows the upgrade
+// toast; this is the enforcement behind it
+async function assertCanChat() {
+  const { has } = await auth()
+  if (!hasFeatures(has, BOT_FEATURES)) {
+    throw new Error("Chatting with bots is part of the Pro plan.")
+  }
+}
+
 // Creates the session and its first run; idempotent per chat id
 export async function startChatSession(
   params: ChatStartSessionParams<typeof chatAgent>
 ) {
   await assertChatOwner(params.chatId)
+  await assertCanChat()
   return start(params)
 }
 
-// The transport calls this to refresh an expired session token
+// The transport calls this to refresh an expired session token, so a
+// cancelled plan stops working once the current token runs out
 export async function mintChatAccessToken(chatId: string) {
   await assertChatOwner(chatId)
+  await assertCanChat()
   return triggerAuth.createPublicToken({
     scopes: { read: { sessions: chatId }, write: { sessions: chatId } },
     expirationTime: "1h",

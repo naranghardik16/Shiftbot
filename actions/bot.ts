@@ -16,6 +16,12 @@ import {
   type CreateBot,
 } from "@/db/schema"
 import {
+  BOT_FEATURES,
+  hasFeatures,
+  SANDBOX_FEATURES,
+  upgradeRequired,
+} from "@/lib/billing"
+import {
   createBotSandbox,
   deleteBotSandbox,
   getSandboxDesktopUrl,
@@ -27,12 +33,17 @@ export type CreateBotResult =
       ok: false
       error: string
       fieldErrors?: Partial<Record<keyof CreateBot, string[]>>
+      upgradeRequired?: true
     }
 
 export async function createBot(input: CreateBot): Promise<CreateBotResult> {
   // Server Actions are public endpoints: check auth before anything else
-  const { isAuthenticated, userId } = await auth()
+  const { isAuthenticated, userId, has } = await auth()
   if (!isAuthenticated) return { ok: false, error: "Sign in to create a bot." }
+  // Bots and their sandboxes cost money, so only paid plans can make them
+  if (!hasFeatures(has, BOT_FEATURES)) {
+    return upgradeRequired("Creating bots is part of the Pro plan.")
+  }
 
   const parsed = createBotSchema.safeParse(input)
   if (!parsed.success) {
@@ -164,12 +175,16 @@ export async function deleteBot(id: string): Promise<DeleteBotResult> {
 
 export type GetBotDesktopResult =
   | { ok: true; url: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; upgradeRequired?: true }
 
 // Wakes the bot's sandbox and desktop if needed and returns a noVNC viewer URL
 export async function getBotDesktop(id: string): Promise<GetBotDesktopResult> {
-  const { isAuthenticated, userId } = await auth()
+  const { isAuthenticated, userId, has } = await auth()
   if (!isAuthenticated) return { ok: false, error: "Sign in to view the screen." }
+  // Connecting wakes the sandbox, which only paid plans can use
+  if (!hasFeatures(has, SANDBOX_FEATURES)) {
+    return upgradeRequired("Bot screens are part of the Pro plan.")
+  }
 
   const bot = await db.query.bots.findFirst({
     where: and(eq(bots.id, id), eq(bots.userId, userId)),

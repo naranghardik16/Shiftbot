@@ -22,6 +22,7 @@ import { FieldGroup } from "@/components/ui/field"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { createBotSchema, type CreateBot } from "@/db/schema"
+import { useUpgradeToast } from "@/hooks/use-upgrade-toast"
 
 function emptyBot(): CreateBot {
   return { name: "", avatar: newSeed(), job: "", instructions: "" }
@@ -36,6 +37,7 @@ function BotDialog({
   handle?: DialogPrimitive.Handle<unknown>
 }) {
   const [open, setOpen] = useState(false)
+  const showUpgradeToast = useUpgradeToast()
   const form = useForm<CreateBot>({
     resolver: zodResolver(createBotSchema),
     defaultValues: emptyBot(),
@@ -43,6 +45,10 @@ function BotDialog({
 
   async function onSubmit(values: CreateBot) {
     const result = await createBot(values)
+    if (!result.ok && result.upgradeRequired) {
+      showUpgradeToast(result.error)
+      return
+    }
     if (!result.ok) {
       for (const [name, messages] of Object.entries(result.fieldErrors ?? {})) {
         form.setError(name as keyof CreateBot, { message: messages?.[0] })
